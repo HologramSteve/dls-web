@@ -13,7 +13,8 @@
     "test": "vitest run",
     "bench": "vitest bench --run",
     "lint": "biome lint --error-on-warnings .",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "e2e": "node scripts/e2e.cjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",

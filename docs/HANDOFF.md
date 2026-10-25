@@ -35,7 +35,8 @@ placing chips, wiring, toggling inputs, NAND truth table simulated correctly, pe
 2. More browser testing of: save menu + customization (resize, displays), chip library menu, context menu
    (right-click), rename/delete/duplicate projects, ROM edit, key chips, bus chips, pulse, LED/RGB/dot displays,
    7-seg, view-mode (entering subchips), undo/redo, import/export round trip with `testdata/Projects/MainTest`.
-3. Add a Playwright e2e test to the repo (scripts used so far live in the session scratchpad: launch chromium with
+3. DONE: `scripts/e2e.cjs` (`npm run e2e` with the dev server on :5173) — smoke test of main menu, placing, wiring,
+   NAND simulation, MainTest import + ALU-8/demo. Extend it. Notes: launch chromium with
    `['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']`, use waits >= 400ms between input
    events because frames are slow; move the mouse before pressing so hover is registered).
 4. Remove the `window.dls` hook / Draw.Debug* getters if undesired (harmless).
