@@ -240,6 +240,9 @@ export class ChipCollection {
 		this.Chips = chips.slice();
 	}
 
+	// (display strings are derived from Name on demand, so nothing to cache)
+	UpdateDisplayStrings() {}
+
 	GetDisplayString(): string {
 		if (this.Chips.length === 0) return "◌ " + this.Name;
 		return this.IsToggledOpen ? "▼ " + this.Name : "▶ " + this.Name;
