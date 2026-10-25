@@ -115,6 +115,14 @@ export class Bounds2D {
 		return !(other.Min.x > this.Max.x || other.Max.x < this.Min.x || other.Min.y > this.Max.y || other.Max.y < this.Min.y);
 	}
 
+	DstToCorner(p: Vector2): number {
+		const centreOffsetX = Math.abs(this.Centre.x - p.x);
+		const centreOffsetY = Math.abs(this.Centre.y - p.y);
+		const edgeOffsetX = Math.abs(this.Size.x / 2 - centreOffsetX);
+		const edgeOffsetY = Math.abs(this.Size.y / 2 - centreOffsetY);
+		return Math.sqrt(edgeOffsetX * edgeOffsetX + edgeOffsetY * edgeOffsetY);
+	}
+
 	PointInBounds(p: Vector2): boolean {
 		return p.x >= this.Min.x && p.x <= this.Max.x && p.y >= this.Min.y && p.y <= this.Max.y;
 	}

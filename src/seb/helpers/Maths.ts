@@ -98,6 +98,20 @@ export const Maths = {
 		return [true, new Vector2(a1.x + (a2.x - a1.x) * t, a1.y + (a2.y - a1.y) * t)];
 	},
 
+	TriangleAreaSigned2D(a: Vector2, b: Vector2, c: Vector2): number {
+		return 0.5 * ((a.x - b.x) * (a.y - c.y) + (a.y - b.y) * (c.x - a.x));
+	},
+
+	// Test if point p is inside the triangle (a, b, c)
+	TriangleContainsPoint(p: Vector2, a: Vector2, b: Vector2, c: Vector2): boolean {
+		// Thanks to https://stackoverflow.com/a/14382692
+		const area = Maths.TriangleAreaSigned2D(a, b, c);
+		const sgn = area >= 0 ? 1 : -1; // (Mathf.Sign returns 1 for 0)
+		const s = (a.y * c.x - a.x * c.y + (c.y - a.y) * p.x + (a.x - c.x) * p.y) * sgn;
+		const t = (a.x * b.y - a.y * b.x + (a.y - b.y) * p.x + (b.x - a.x) * p.y) * sgn;
+		return s >= 0 && t >= 0 && s + t < 2 * Math.abs(area);
+	},
+
 	TwosComplement(unsignedValue: number, numBits: number): number {
 		if (numBits < 32) {
 			const unsignedRange = 2 ** numBits;

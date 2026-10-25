@@ -126,6 +126,13 @@ export class Vector2Int {
 		this.y = y | 0;
 	}
 
+	static readonly zero = new Vector2Int(0, 0);
+	static readonly one = new Vector2Int(1, 1);
+	static readonly right = new Vector2Int(1, 0);
+	static readonly left = new Vector2Int(-1, 0);
+	static readonly up = new Vector2Int(0, 1);
+	static readonly down = new Vector2Int(0, -1);
+
 	toVector2(): Vector2 {
 		return new Vector2(this.x, this.y);
 	}

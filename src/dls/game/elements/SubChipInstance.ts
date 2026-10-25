@@ -239,7 +239,7 @@ function CreateDisplayInstances(chipDesc: ChipDescription): DisplayInstance[] {
 
 function CreateDisplayInstance(displayDesc: DisplayDescription, chipDesc: ChipDescription): DisplayInstance {
 	const instance = new DisplayInstance();
-	instance.Desc = displayDesc;
+	instance.Desc = { ...displayDesc }; // (struct copy)
 	instance.DisplayType = chipDesc.ChipType;
 
 	if (chipDesc.ChipType === ChipType.Custom) {

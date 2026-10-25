@@ -1,5 +1,4 @@
 // Port of DLS.Graphics.ChipLabelMenu
-import { Color } from "../../../../seb/types/Color";
 import { Vector2 } from "../../../../seb/types/Vector2";
 import { Anchor } from "../../../../seb/vis/Anchor";
 import { UI } from "../../../../seb/vis/ui/UI";
