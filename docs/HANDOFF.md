@@ -14,7 +14,7 @@ placing chips, wiring, toggling inputs, NAND truth table simulated correctly, pe
 Ctrl+S save of a custom chip (library + auto-star), using it inside another chip (simulates correctly), view mode,
 import of `testdata/Projects/MainTest` (ALU-8 and demo with 7-seg displays render + simulate), library / prefs /
 customize / context menus render like the original. KEY chip responds to held keys. AudioWorklet starts on first
-click. Production build (`vite build` + `vite preview`) runs the worker at the 1000 steps/s target.
+click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import round trip (ProjectTransfer). Production build (`vite build` + `vite preview`) runs the worker at the 1000 steps/s target.
 
 ### Web-specific additions / deviations (keep documented here)
 - `src/main.ts` = UnityMain (rAF loop). Exposes `window.dls` (Project, WorldCam, UIDrawer, IS, Main, Draw, SimHost)
@@ -38,7 +38,8 @@ click. Production build (`vite build` + `vite preview`) runs the worker at the 1
    real GPUs but NOT yet verified on hardware. If needed: cache text into an atlas or skip curves by bbox.
 2. Not yet exercised interactively: customization edits (resize handles, placing/scaling displays), library
    operations (move/rename/delete collections & chips), rename/delete/duplicate projects, ROM edit + paste, bus chips,
-   pulse edit, LED colour, RGB/dot displays, undo/redo, buzzer sound, zip export->import round trip via the UI.
+   pulse edit, LED colour, RGB/dot displays, buzzer sound, the file picker / download UI of import/export.
+   Testing tip: Playwright's keyboard.press releases instantly; hold modifier+key for ~300ms each (frames are slow).
 3. DONE: `scripts/e2e.cjs` (`npm run e2e` with the dev server on :5173) — smoke test of main menu, placing, wiring,
    NAND simulation, MainTest import + ALU-8/demo. Extend it. Notes: launch chromium with
    `['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']`, use waits >= 400ms between input
