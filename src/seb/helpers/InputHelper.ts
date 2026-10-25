@@ -52,6 +52,8 @@ class DomInputSource {
 	private pMouseDown = [false, false, false];
 	private pMouseUp = [false, false, false];
 	private deferredUp = [false, false, false];
+	private deferredKeyUps = new Set<string>();
+	private releaseKeysThisFrame = new Set<string>();
 	private releaseHeldThisFrame = [false, false, false];
 	private pInput = "";
 	private pScrollX = 0;
@@ -133,6 +135,12 @@ class DomInputSource {
 		});
 		window.addEventListener("keyup", (e) => {
 			const code = e.code || e.key;
+			// If pressed and released within a single frame, deliver the release on the following frame
+			// (so that e.g. a quick Ctrl+S is still seen as Ctrl held while S goes down)
+			if (this.pKeysDown.has(code)) {
+				this.deferredKeyUps.add(code);
+				return;
+			}
 			this.keysHeld.delete(code);
 			this.pKeysUp.add(code);
 			// On macOS, keyup events for other keys are not sent while Meta is held: clear them when Meta is released
@@ -164,6 +172,13 @@ class DomInputSource {
 		this.keysUp = this.pKeysUp;
 		this.pKeysDown = new Set();
 		this.pKeysUp = new Set();
+		for (const k of this.releaseKeysThisFrame) if (this.keysUp.has(k)) this.keysHeld.delete(k);
+		this.releaseKeysThisFrame.clear();
+		for (const k of this.deferredKeyUps) {
+			this.pKeysUp.add(k);
+			this.releaseKeysThisFrame.add(k);
+		}
+		this.deferredKeyUps.clear();
 		this.mouseDown = this.pMouseDown;
 		this.mouseUp = this.pMouseUp;
 		this.pMouseDown = [false, false, false];

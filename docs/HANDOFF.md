@@ -10,7 +10,10 @@ ALL original C# files are ported (Seb lib, Description, SaveSystem, Simulation, 
 `npm run check` (typecheck + lint + tests) is green; no tsconfig excludes remain. The app runs (`npm run dev`).
 
 Verified in headless Chromium (Playwright): main menu, new project, open project, bottom bar + collection popup,
-placing chips, wiring, toggling inputs, NAND truth table simulated correctly, persistence across reloads (IndexedDB).
+placing chips, wiring, toggling inputs, NAND truth table simulated correctly, persistence across reloads (IndexedDB),
+Ctrl+S save of a custom chip (library + auto-star), using it inside another chip (simulates correctly), view mode,
+import of `testdata/Projects/MainTest` (ALU-8 and demo with 7-seg displays render + simulate), library / prefs /
+customize / context menus render like the original.
 
 ### Web-specific additions / deviations (keep documented here)
 - `src/main.ts` = UnityMain (rAF loop). Exposes `window.dls` (Project, WorldCam, UIDrawer, IS, Main, Draw, SimHost)
@@ -23,7 +26,7 @@ placing chips, wiring, toggling inputs, NAND truth table simulated correctly, pe
 - Sim runs in a worker (`src/worker/simWorker.ts`); Project.SyncWithSimulation replaces the sim-thread frame sync.
   Project.NotifyExit replaces the worker's root with an empty chip (stops sim + silences audio).
 - Worker pacing: sleeps between batches of steps (setTimeout) instead of busy-waiting; busy only when behind.
-- Input: a mouse press+release within one frame delivers the release on the next frame (InputHelper).
+- Input: a mouse button or key press+release within one frame delivers the release on the next frame (InputHelper).
 - ROM "PASTE ALL" uses navigator.clipboard.readText (falls back to the next Ctrl+V paste event).
 - Audio: AudioWorklet (`src/dls/game/audio/`), started on first pointer/key press.
 - Ctrl+N / Ctrl+Q / Ctrl+W can't be intercepted in most browsers — use the MENU popup buttons.
