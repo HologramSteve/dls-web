@@ -2,16 +2,18 @@
 
 ## Plan (tasks)
 1. [done] Read original source (Unity C#).
-2. [in progress] Scaffold Vite+TS project, fonts copied to public/fonts.
-3. [in progress] Port Seb library: types (Vector2, Color, Mathf, Bounds2D, Scope) DONE;
-   text: FontParser, FontData (+contours/monotonic), TextLayout (bounds, anchors, rich text) DONE.
-   TODO: helpers (ColHelper, Maths, StringHelper, InputHelper over DOM, Time/Screen),
-   Draw (WebGL2 instanced shape renderer = port of Draw.shader; bezier text shader = port of TextShader,
-   glyph data in float textures), UI.cs + UIStates/Themes/LayoutHelper.
+2. [done] Scaffold Vite+TS project, fonts copied to public/fonts.
+3. [done] Port Seb library (src/seb): types, helpers (ColHelper, Maths, StringHelper, Platform=Time/Screen,
+   InputHelper over DOM + WorldCam), text (FontParser, FontData, TextLayout), Draw.ts (API + WebGL2 backend),
+   internal/Shaders.ts (GLSL ports of Draw.shader + TextShader), ui/ (UI.ts, UIStates, UITheme).
+   Verified visually with a throwaway src/main.ts render test (shapes + bezier text render correctly).
+   NOTE: src/main.ts is currently a render smoke test; replace with real app bootstrap in task 5.
 4. TODO Port Description, SaveSystem (virtual FS in memory, persisted to IndexedDB; zip/folder import/export),
    Simulation in Web Worker.
 5. TODO Port Game (Project, DevChipInstance, elements, interaction, camera, undo), Graphics (scene drawers),
    all menus (ui1/2/3 in original Graphics/UI/Menus).
+   Screenshot helper: scratch script using require('playwright') with chromium args
+   ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] against `npx vite`.
 6. TODO Browser test (Playwright preinstalled), perf, docs, push.
 
 ## Key design decisions
