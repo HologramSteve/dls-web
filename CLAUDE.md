@@ -13,8 +13,10 @@ Web port of Sebastian Lague's **Digital Logic Sim** (Unity/C#, MIT) to the brows
 - After finishing each task: update `docs/HANDOFF.md`, update this file if conventions changed, commit and push
   to branch `claude/blissful-brahmagupta-8yaivk`.
 
+- Web-only additions (zip import/export, worker pacing, input tweaks) are listed in `docs/HANDOFF.md`; keep that list current.
+
 ## Commands
-- `npm install`, `npm run dev`, `npm run build`, `npm run typecheck`, `npm test`
+- `npm install`, `npm run dev`, `npm run build`, `npm run typecheck`, `npm test`, `npm run check` (all of typecheck+lint+test)
 
 ## Layout
 - `src/seb/` — port of the Seb library (types, helpers, Draw/WebGL renderer, text, immediate-mode UI)
