@@ -13,7 +13,8 @@ Verified in headless Chromium (Playwright): main menu, new project, open project
 placing chips, wiring, toggling inputs, NAND truth table simulated correctly, persistence across reloads (IndexedDB),
 Ctrl+S save of a custom chip (library + auto-star), using it inside another chip (simulates correctly), view mode,
 import of `testdata/Projects/MainTest` (ALU-8 and demo with 7-seg displays render + simulate), library / prefs /
-customize / context menus render like the original.
+customize / context menus render like the original. KEY chip responds to held keys. AudioWorklet starts on first
+click. Production build (`vite build` + `vite preview`) runs the worker at the 1000 steps/s target.
 
 ### Web-specific additions / deviations (keep documented here)
 - `src/main.ts` = UnityMain (rAF loop). Exposes `window.dls` (Project, WorldCam, UIDrawer, IS, Main, Draw, SimHost)
@@ -35,9 +36,9 @@ customize / context menus render like the original.
 1. Performance in headless Chromium + SwiftShader (software GL) is poor (~4-20 fps) because the bezier text
    fragment shader (same algorithm as the original TextShader) is expensive on a CPU rasterizer. Expected fine on
    real GPUs but NOT yet verified on hardware. If needed: cache text into an atlas or skip curves by bbox.
-2. More browser testing of: save menu + customization (resize, displays), chip library menu, context menu
-   (right-click), rename/delete/duplicate projects, ROM edit, key chips, bus chips, pulse, LED/RGB/dot displays,
-   7-seg, view-mode (entering subchips), undo/redo, import/export round trip with `testdata/Projects/MainTest`.
+2. Not yet exercised interactively: customization edits (resize handles, placing/scaling displays), library
+   operations (move/rename/delete collections & chips), rename/delete/duplicate projects, ROM edit + paste, bus chips,
+   pulse edit, LED colour, RGB/dot displays, undo/redo, buzzer sound, zip export->import round trip via the UI.
 3. DONE: `scripts/e2e.cjs` (`npm run e2e` with the dev server on :5173) — smoke test of main menu, placing, wiring,
    NAND simulation, MainTest import + ALU-8/demo. Extend it. Notes: launch chromium with
    `['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']`, use waits >= 400ms between input
