@@ -8,9 +8,15 @@
    internal/Shaders.ts (GLSL ports of Draw.shader + TextShader), ui/ (UI.ts, UIStates, UITheme).
    Verified visually with a throwaway src/main.ts render test (shapes + bezier text render correctly).
    NOTE: src/main.ts is currently a render smoke test; replace with real app bootstrap in task 5.
-4. TODO Port Description, SaveSystem (virtual FS in memory, persisted to IndexedDB; zip/folder import/export),
-   Simulation in Web Worker.
-5. TODO Port Game (Project, DevChipInstance, elements, interaction, camera, undo), Graphics (scene drawers),
+4. [done] Description (Types, ChipTypeHelper, Serializer+UnsavedChangeDetector), SaveSystem (FileSystem = in-memory
+   virtual FS persisted to IndexedDB, SavePaths/SaveUtils, Saver/Loader/UpgradeHelper in Saver.ts), Simulation
+   (PinState, SimChip/SimPin, Simulator, SimAudio = worker side; SimHost.ts = main-thread proxy + command queue;
+   worker/simWorker.ts). Tests: tests/sim.test.ts (truth tables from testdata), bench: npm run bench.
+   Also ported: DrawSettings, GridHelper/IDGenerator, PinLayout, BuiltinChipCreator(+collections), ChipLibrary, Version.
+   TODO later: zip/folder import/export of projects.
+5. [in progress] Port Game (elements/ started: Interfaces, PinInstance. tsconfig temporarily EXCLUDES
+   src/dls/game/elements until DevPin/SubChip/Wire/DevChipInstance exist -- remove that exclude!).
+   DescriptionCreator.ts currently only has CreateDefaultInstanceData. Rest of game: (Project, DevChipInstance, elements, interaction, camera, undo), Graphics (scene drawers),
    all menus (ui1/2/3 in original Graphics/UI/Menus).
    Screenshot helper: scratch script using require('playwright') with chromium args
    ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] against `npx vite`.
@@ -26,3 +32,7 @@
 - Rendering: one WebGL2 canvas; layers like SebVis (shapes then text per layer). Coordinates: Unity
   conventions (screen origin bottom-left, y up); mouse y is flipped on input.
 - Web adaptations: Quit -> Import/Export project; Settings -> fullscreen toggle; Meta treated as Ctrl.
+
+## CI / tooling
+- `.github/workflows/ci.yml`: npm ci, typecheck, lint (Biome, `--error-on-warnings`), test, vite build.
+- Run `npm run check` locally before pushing. Commit+push after every file group.
