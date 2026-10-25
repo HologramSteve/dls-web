@@ -19,11 +19,13 @@ Original source for reference: `git clone --depth 1 https://github.com/SebLague/
 5. [in progress] Game layer. Written (not yet typechecked, dir excluded in tsconfig!):
    `src/dls/game/elements/{Interfaces,PinInstance,DevPinInstance,SubChipInstance(+DisplayInstance,CreateMultiLineName),WireInstance(+ConnectionInfo class w/ clone(), BitWire)}`,
    `src/dls/graphics/WireLayoutHelper.ts` (CreateMultiBitWireLayout, GetClosestPointOnWire, DrawWireStraight).
+   DONE since: DescriptionCreator.ts (full), game/DevChipInstance.ts, game/UndoController.ts.
+   !! CI is currently RED: these import ./Project which does not exist yet. Write game/Project.ts first.
    NEXT, in order (port each C# file 1:1):
-   a. saveSystem/DescriptionCreator.ts: add CreateChipDescription, CreateSubChipDescription,
+   a. [done] saveSystem/DescriptionCreator.ts: add CreateChipDescription, CreateSubChipDescription,
       CreateBuiltinSubChipDescriptionForPlacement, UpdateWireIndicesForDescriptionCreation, CreateWireDescription,
       CreatePinDescription, RandomInitialChipColour (original Assets/Scripts/SaveSystem/DescriptionCreator.cs).
-   b. game/DevChipInstance.ts (+ UpdateStateFromSim using SimHost.GetSnapshotFor(simChipRef): snapshot.pins is
+   b. [done] game/DevChipInstance.ts (+ UpdateStateFromSim using SimHost.GetSnapshotFor(simChipRef): snapshot.pins is
       5 ints/pin [owner,pinID,state,srcID,srcParentID]; dev pins keyed (pinID,0)), game/UndoController.ts.
    c. game/Project.ts (Project.ActiveProject static; no sim thread: each frame call SimHost.SendFrame with inputs
       [devPinID, PlayerInputState] of edit chip input pins, held keys (A-Z,0-9 only, none if ctrl/shift/alt),
