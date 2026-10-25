@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Digital Logic Sim</title>
+		<style>
+			html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+			canvas#dls { display: block; width: 100vw; height: 100vh; outline: none; cursor: default; touch-action: none; }
+			#dls-fallback { color: #ccc; font: 16px monospace; padding: 2em; }
+		</style>
+	</head>
+	<body>
+		<canvas id="dls" tabindex="0"></canvas>
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>
