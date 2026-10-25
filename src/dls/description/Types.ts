@@ -296,5 +296,5 @@ export interface AppSettings {
 }
 
 export function DefaultAppSettings(): AppSettings {
-	return { ResolutionX: 1920, ResolutionY: 1080, fullscreenMode: 0, VSyncEnabled: true };
+	return { ResolutionX: 1920, ResolutionY: 1080, fullscreenMode: 3, VSyncEnabled: true }; // (web: windowed by default)
 }

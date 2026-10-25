@@ -201,11 +201,13 @@ function loop() {
 	recordTicks(performance.now(), stepsDone);
 
 	if (stepDebt >= 1) {
+		// Behind schedule (time slice ran out): continue immediately
 		scheduleImmediate();
 	} else {
+		// Sleep until the next step is due. Steps are run in small batches (timer resolution is a few ms),
+		// rather than busy-waiting between individual steps like the original's dedicated thread does.
 		const msUntilNextStep = ((1 - stepDebt) / targetTicksPerSecond) * 1000;
-		if (msUntilNextStep < 4) scheduleImmediate();
-		else setTimeout(loop, Math.min(msUntilNextStep, 50));
+		setTimeout(loop, Math.min(Math.max(msUntilNextStep, 1), 50));
 	}
 }
 

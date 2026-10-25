@@ -449,6 +449,15 @@ export const Draw = {
 		renderer.render();
 	},
 
+	// (debug) raw instance data of shapes drawn so far this frame
+	get DebugShapeData(): Float32Array {
+		return shapes.data.slice(0, shapes.count * FloatsPerInstance);
+	},
+
+	get DebugGlyphData(): Float32Array {
+		return glyphs.data.slice(0, glyphs.count * FloatsPerInstance);
+	},
+
 	get Stats() {
 		return { shapes: shapes.count, glyphs: glyphs.count, layers: layers.length };
 	},

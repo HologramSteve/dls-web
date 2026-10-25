@@ -458,6 +458,9 @@ export class Project {
 
 	NotifyExit() {
 		this.simStarted = false;
+		// (web: the sim worker keeps running, so replace its chip with an empty one to stop it (and silence any buzzers))
+		const empty = Simulator.CreateEmptyRoot();
+		SimHost.SendFrame({ inputs: new Int32Array(0), keys: "", view: empty, paused: true, targetTicksPerSecond: 1, stepsPerClockTransition: 1 });
 	}
 
 	UpdateAndSaveProjectDescription(editedProjectDesc?: ProjectDescription) {

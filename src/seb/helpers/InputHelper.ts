@@ -51,6 +51,8 @@ class DomInputSource {
 	private pKeysUp = new Set<string>();
 	private pMouseDown = [false, false, false];
 	private pMouseUp = [false, false, false];
+	private deferredUp = [false, false, false];
+	private releaseHeldThisFrame = [false, false, false];
 	private pInput = "";
 	private pScrollX = 0;
 	private pScrollY = 0;
@@ -89,8 +91,13 @@ class DomInputSource {
 			updateMouse(e);
 			const b = mapButton(e.button);
 			if (b >= 0 && this.mouseHeld[b]) {
-				this.pMouseUp[b] = true;
-				this.mouseHeld[b] = false;
+				// If pressed and released within a single frame, deliver the release on the following frame
+				// (Unity never reports both in the same frame, and UI buttons rely on seeing the press while held)
+				if (this.pMouseDown[b]) this.deferredUp[b] = true;
+				else {
+					this.pMouseUp[b] = true;
+					this.mouseHeld[b] = false;
+				}
 			}
 		});
 		canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -161,6 +168,17 @@ class DomInputSource {
 		this.mouseUp = this.pMouseUp;
 		this.pMouseDown = [false, false, false];
 		this.pMouseUp = [false, false, false];
+		for (let i = 0; i < 3; i++) {
+			if (this.releaseHeldThisFrame[i]) {
+				this.releaseHeldThisFrame[i] = false;
+				if (this.mouseUp[i]) this.mouseHeld[i] = false;
+			}
+			if (this.deferredUp[i]) {
+				this.deferredUp[i] = false;
+				this.pMouseUp[i] = true;
+				this.releaseHeldThisFrame[i] = true;
+			}
+		}
 		this.inputString = this.pInput;
 		this.pInput = "";
 		this.scrollDelta = new Vector2(this.pScrollX, this.pScrollY);

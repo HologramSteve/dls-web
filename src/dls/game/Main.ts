@@ -30,7 +30,9 @@ export const Main = {
 	audioState: null as unknown as AudioState,
 
 	Init(audioState: AudioState) {
-		Main.SaveAndApplyAppSettings(Loader.LoadAppSettings());
+		// (web: fullscreen can only be entered from a user gesture, so settings are applied from the settings menu only)
+		Main.ActiveAppSettings = Loader.LoadAppSettings();
+		Saver.SaveAppSettings(Main.ActiveAppSettings);
 		Main.audioState = audioState;
 	},
 
