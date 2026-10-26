@@ -14,7 +14,10 @@
     "bench": "vitest bench --run",
     "lint": "biome lint --error-on-warnings .",
     "check": "npm run typecheck && npm run lint && npm test",
-    "e2e": "node scripts/e2e.cjs"
+    "e2e": "node scripts/e2e.cjs",
+    "build:wasm": "cargo build --manifest-path rust/dls-sim/Cargo.toml --profile wasm --target wasm32-unknown-unknown && cp rust/dls-sim/target/wasm32-unknown-unknown/wasm/dls_sim.wasm src/worker/dls_sim.wasm",
+    "test:rust": "cargo test --release --manifest-path rust/dls-sim/Cargo.toml",
+    "bench:rust": "cargo run --release --manifest-path rust/dls-sim/Cargo.toml --bin bench"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",

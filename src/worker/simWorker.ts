@@ -1,13 +1,15 @@
 /// <reference lib="webworker" />
 // Simulation Web Worker. Equivalent of Project.SimThread in the original: owns the simulation, applies queued
 // modifications, steps the simulation at the target rate, and answers frame requests with state snapshots.
-import { Simulator } from "../dls/simulation/Simulator";
-import type { SimChip } from "../dls/simulation/SimChip";
-import type { DisplayData, FrameRequest, Snapshot } from "../dls/simulation/SimProtocol";
+import type { FrameRequest, Snapshot, WorkerInit } from "../dls/simulation/SimProtocol";
+import { JsEngine, type SimEngine, WasmEngine } from "./engines";
+import wasmUrl from "./dls_sim.wasm?url";
 
 const SimulationPerformanceTimeWindowSec = 1.5;
 
-let inputs = new Int32Array(0);
+let engine: SimEngine | null = null;
+// Frame requests that arrived before the engine finished loading
+const pending: FrameRequest[] = [];
 let paused = false;
 let pendingSingleSteps = 0;
 let pausedSingleStepCounter = 0;
@@ -17,6 +19,9 @@ let lastError: string | null = null;
 // Step pacing
 let stepDebt = 0; // fractional steps owed
 let lastLoopTime = performance.now();
+// Steps per engine call, adapted so that one batch takes about BatchTargetMs
+let batchSize = 1;
+const BatchTargetMs = 1;
 
 // Perf counter (ticks per second over sliding window)
 const tickWindow: [number, number][] = []; // [timeMs, steps]
@@ -39,105 +44,73 @@ function recordTicks(now: number, steps: number) {
 	} else simAvgTicksPerSec = 0;
 }
 
-function applyCommands(req: FrameRequest) {
-	for (const cmd of req.cmds) {
-		try {
-			Simulator.ApplyModification(cmd);
-		} catch (e) {
-			// Possible for main thread and sim to be temporarily out of sync, so just ignore failures
-			lastError = String(e);
-		}
-	}
-}
-
-function resolvePath(path: number[]): SimChip | null {
-	let chip: SimChip | null = Simulator.rootSimChip;
-	for (const id of path) {
-		chip = chip.TryGetSubChipFromID(id);
-		if (!chip) return null;
-	}
-	return chip;
-}
-
-function buildSnapshot(req: FrameRequest): Snapshot {
-	const view = resolvePath(req.viewPath);
-	let pins = new Int32Array(0);
-	let subChipIDs = new Int32Array(0);
-
-	if (view) {
-		let count = view.InputPins.length + view.OutputPins.length;
-		for (const s of view.SubChips) count += s.InputPins.length + s.OutputPins.length;
-		pins = new Int32Array(count * 5);
-		let o = 0;
-		const write = (owner: number, pinID: number, state: number, src: number, srcParent: number) => {
-			pins[o++] = owner;
-			pins[o++] = pinID;
-			pins[o++] = state;
-			pins[o++] = src;
-			pins[o++] = srcParent;
-		};
-		for (const p of view.InputPins) write(p.ID, 0, p.State, p.latestSourceID, p.latestSourceParentChipID);
-		for (const p of view.OutputPins) write(p.ID, 0, p.State, p.latestSourceID, p.latestSourceParentChipID);
-		subChipIDs = new Int32Array(view.SubChips.length);
-		for (let i = 0; i < view.SubChips.length; i++) {
-			const s = view.SubChips[i];
-			subChipIDs[i] = s.ID;
-			for (const p of s.InputPins) write(s.ID, p.ID, p.State, p.latestSourceID, p.latestSourceParentChipID);
-			for (const p of s.OutputPins) write(s.ID, p.ID, p.State, p.latestSourceID, p.latestSourceParentChipID);
-		}
-	}
-
-	const displays: DisplayData[] = [];
+function buildSnapshot(e: SimEngine, req: FrameRequest): Snapshot {
+	const view = e.snapshotView(req.viewPath);
+	const displays = [];
 	for (const path of req.displayPaths) {
-		const chip = resolvePath(path);
-		if (!chip) continue;
-		const ins = new Int32Array(chip.InputPins.length);
-		for (let i = 0; i < ins.length; i++) ins[i] = chip.InputPins[i].State;
-		displays.push({ path, inputs: ins, internal: chip.InternalState.slice() });
+		const d = e.display(path);
+		if (d) displays.push(d);
 	}
-
-	let audio: Float64Array | null = null;
-	if (Simulator.audioState.dirty) {
-		Simulator.audioState.dirty = false;
-		audio = Simulator.audioState.targetAmplitudesPerFreq.slice();
-	}
-
 	const snap: Snapshot = {
 		type: "snapshot",
 		frameId: req.frameId,
-		pins,
-		viewChipID: view ? view.ID : -1,
-		subChipIDs,
-		viewPathValid: view !== null,
+		pins: view.pins,
+		viewChipID: view.viewChipID,
+		subChipIDs: view.subChipIDs,
+		viewPathValid: view.valid,
 		displays,
 		ticksPerSecond: simAvgTicksPerSec,
-		simulationFrame: Simulator.simulationFrame,
+		simulationFrame: e.simulationFrame,
 		pausedSingleStepCounter,
-		audio,
+		audio: e.audio(),
 		error: lastError,
 	};
 	lastError = null;
 	return snap;
 }
 
-self.onmessage = (e: MessageEvent<FrameRequest>) => {
-	const req = e.data;
-	if (req.type !== "frame") return;
-
-	applyCommands(req);
-	inputs = req.inputs;
-	Simulator.heldKeys = new Set(req.keys);
+function handleFrame(e: SimEngine, req: FrameRequest) {
+	const err = e.applyCommands(req.cmds);
+	if (err) lastError = err;
+	e.setInputs(req.inputs);
+	e.setKeys(req.keys);
+	e.setViewPath(req.viewPath);
 	paused = req.paused;
 	pendingSingleSteps += req.singleSteps;
 	targetTicksPerSecond = Math.max(1, req.targetTicksPerSecond);
-	Simulator.stepsPerClockTransition = req.stepsPerClockTransition;
+	e.setStepsPerClockTransition(req.stepsPerClockTransition);
 
-	const snap = buildSnapshot(req);
+	const snap = buildSnapshot(e, req);
 	const transfer: Transferable[] = [snap.pins.buffer, snap.subChipIDs.buffer];
 	for (const d of snap.displays) transfer.push(d.inputs.buffer, d.internal.buffer);
 	if (snap.audio) transfer.push(snap.audio.buffer);
 	(self as unknown as Worker).postMessage(snap, transfer);
+}
+
+self.onmessage = (e: MessageEvent<FrameRequest | WorkerInit>) => {
+	const msg = e.data;
+	if (msg.type === "init") {
+		init(msg);
+		return;
+	}
+	if (msg.type !== "frame") return;
+	if (engine) handleFrame(engine, msg);
+	else pending.push(msg);
 };
+
+async function init(msg: WorkerInit) {
+	if (msg.engine === "rust") {
+		try {
+			engine = await WasmEngine.create(fetch(wasmUrl), { tables: msg.tables });
+		} catch (err) {
+			console.error("Failed to load the Rust simulation engine; using the JS engine instead", err);
+		}
+	}
+	if (!engine) engine = new JsEngine();
+	console.info(`Simulation engine: ${engine.name}` + (engine.name === "rust" ? ` (truth tables ${msg.tables ? "on" : "off"})` : ""));
+	for (const req of pending.splice(0)) handleFrame(engine, req);
+	loop();
+}
 
 // ---- Stepping loop ----
 // Runs in short time slices so that incoming messages are processed regularly.
@@ -149,16 +122,14 @@ function scheduleImmediate() {
 
 const SliceBudgetMs = 8;
 
-function step() {
-	try {
-		Simulator.RunSimulationStep(Simulator.rootSimChip, inputs);
-	} catch (e) {
-		lastError = String(e);
-		Simulator.needsOrderPass = true;
-	}
+function runSteps(e: SimEngine, n: number) {
+	const err = e.step(n);
+	if (err) lastError = err;
 }
 
 function loop() {
+	const e = engine;
+	if (!e) return;
 	const now = performance.now();
 
 	if (paused) {
@@ -168,10 +139,10 @@ function loop() {
 		while (pendingSingleSteps > 0) {
 			pendingSingleSteps--;
 			pausedSingleStepCounter++;
-			step();
+			runSteps(e, 1);
 			n++;
 		}
-		if (n === 0) Simulator.UpdateInPausedState();
+		if (n === 0) e.updatePaused();
 		recordTicks(now, n);
 		setTimeout(loop, 10);
 		return;
@@ -189,10 +160,15 @@ function loop() {
 	let stepsDone = 0;
 	const sliceStart = now;
 	while (stepDebt >= 1) {
-		step();
-		stepDebt -= 1;
-		stepsDone++;
-		if ((stepsDone & 15) === 0 && performance.now() - sliceStart > SliceBudgetMs) break;
+		const n = Math.min(Math.floor(stepDebt), batchSize);
+		const t0 = performance.now();
+		runSteps(e, n);
+		const dt = performance.now() - t0;
+		stepDebt -= n;
+		stepsDone += n;
+		// Adapt batch size so that a batch takes about BatchTargetMs
+		if (n === batchSize) batchSize = dt < BatchTargetMs * 0.5 ? Math.min(batchSize * 2, 1 << 16) : dt > BatchTargetMs * 2 ? Math.max(1, batchSize >> 1) : batchSize;
+		if (performance.now() - sliceStart > SliceBudgetMs) break;
 	}
 	if (performance.now() - sliceStart > SliceBudgetMs) {
 		// Couldn't keep up: drop excess debt
@@ -210,6 +186,3 @@ function loop() {
 		setTimeout(loop, Math.min(Math.max(msUntilNextStep, 1), 50));
 	}
 }
-
-Simulator.Reset();
-loop();

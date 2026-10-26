@@ -6,7 +6,7 @@
 import type { ChipDescription, PinAddress } from "../description/Types";
 import type { SimChipDesc } from "./SimChip";
 import type { SimModifyCommand } from "./Simulator";
-import type { DisplayData, FrameRequest, Snapshot } from "./SimProtocol";
+import type { DisplayData, FrameRequest, Snapshot, WorkerInit } from "./SimProtocol";
 import { PinState } from "./PinState";
 
 export function ToSimDesc(desc: ChipDescription): SimChipDesc {
@@ -102,6 +102,11 @@ class SimHostImpl {
 		this.worker = new Worker(new URL("../../worker/simWorker.ts", import.meta.url), { type: "module" });
 		this.worker.onmessage = (e: MessageEvent<Snapshot>) => this.OnSnapshot(e.data);
 		this.worker.onerror = (e) => console.error("Simulation worker error", e);
+		// Engine selection (web-only): Rust/WebAssembly engine by default; `?engine=js` uses the TS port of the
+		// original simulator, `?tables=0` disables truth tables in the Rust engine.
+		const params = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
+		const init: WorkerInit = { type: "init", engine: params.get("engine") === "js" ? "js" : "rust", tables: params.get("tables") !== "0" };
+		this.worker.postMessage(init);
 	}
 
 	private OnSnapshot(snap: Snapshot) {

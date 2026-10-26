@@ -220,7 +220,7 @@ fn build_table(e: &mut Engine, name: &str, hash: u64) -> Option<u32> {
 	}
 	// Only worth it if simulating the internals costs more than a lookup
 	let io = (desc.input_ids.len() + desc.output_ids.len()) as u64;
-	if info.cost < io + 6 {
+	if info.cost < 2 * io + 8 {
 		return None;
 	}
 	let rows = 1u64 << bits;

@@ -18,7 +18,11 @@ const check = (cond, msg) => {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 	const errors = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+	const consoleLines = [];
+	page.on("console", (m) => {
+		consoleLines.push(m.text());
+		if (m.type() === "error") errors.push(m.text());
+	});
 	await page.goto(url);
 	await page.waitForFunction(() => window.dls);
 	await page.waitForTimeout(1000);
@@ -120,6 +124,19 @@ const check = (cond, msg) => {
 	await page.evaluate(() => window.dls.Project.ActiveProject.LoadDevChipOrCreateNewIfDoesntExist("demo"));
 	await wait(2500);
 	await shot("04_demo");
+
+	const expectEngine = url.includes("engine=js") ? "js" : "rust";
+	check(consoleLines.some((l) => l.startsWith("Simulation engine: " + expectEngine)), "simulation engine: " + expectEngine);
+
+	// ---- Simulation speed on the largest test chip (RAM-sync, ~24k NANDs) with an unlimited target rate ----
+	await page.evaluate(() => window.dls.Project.ActiveProject.LoadDevChipOrCreateNewIfDoesntExist("RAM-sync"));
+	await page.evaluate(() => {
+		window.dls.Project.ActiveProject.description.Prefs_SimTargetStepsPerSecond = 1000000;
+	});
+	await wait(6000);
+	const tps = await page.evaluate(() => window.dls.SimHost.simAvgTicksPerSec);
+	console.log(" RAM-sync steps/s in browser (" + expectEngine + "): " + Math.round(tps));
+	check(tps > 0, "RAM-sync simulates");
 
 	check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join(" | ") : ""));
 	await browser.close();

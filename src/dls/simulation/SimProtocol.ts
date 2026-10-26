@@ -44,7 +44,9 @@ export interface Snapshot {
 	error: string | null;
 }
 
+// First message to the worker: which simulation engine to use (see worker/engines.ts)
 export interface WorkerInit {
 	type: "init";
-	freqs: null;
+	engine: "rust" | "js";
+	tables: boolean;
 }
