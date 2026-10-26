@@ -158,5 +158,49 @@ const { launch } = require("./e2eHelpers.cjs");
 	});
 	console.log(" rgb pixels:", pix);
 	check(pix && pix[0] === 15 && pix[1] === 15 << 4 && pix[2] === 15 << 8, "RGB display pixels written");
+
+	// ---- Save + customize ----
+	await h.combo("Control", "s");
+	await wait(600);
+	await h.shot("f10_save_menu");
+	await h.type("DISP");
+	await wait(400);
+	await h.shot("f11_save_named");
+	await h.click(640, 361); // CUSTOMIZE
+	await wait(1000);
+	await h.shot("f12_customize");
+	const custDesc = () =>
+		ev(async () => {
+			const d = (await import("/src/dls/graphics/ui/menus/ChipSaveMenu.ts")).ChipSaveMenu.ActiveCustomizeDescription;
+			return { size: [d.Size.x, d.Size.y], displays: d.Displays?.length ?? 0, col: d.Colour.toString?.() };
+		});
+	const before = await custDesc();
+	console.log(" customize desc before:", JSON.stringify(before));
+	await h.drag(687, 360, 900, 360); // widen
+	await h.drag(637, 459, 637, 560); // taller
+	await h.shot("f13_resized");
+	const resized = await custDesc();
+	console.log(" after resize:", JSON.stringify(resized));
+	check(resized.size[0] > before.size[0] && resized.size[1] > before.size[1], "chip resized with handles");
+	await h.click(115, 420); // RGB DISPLAY: start placing
+	await h.move(700, 380);
+	await h.click(700, 380);
+	await h.move(1100, 650);
+	await h.shot("f14_display_added");
+	await h.click(184, 22); // CONFIRM
+	await wait(800);
+	await h.shot("f15_after_confirm");
+	const confirmed = await custDesc();
+	console.log(" after confirm:", JSON.stringify(confirmed));
+	check(confirmed.displays === 1, "display added to chip");
+	check((await ev(() => window.dls.UIDrawer.ActiveMenu)) === 1, "back in save menu");
+	await h.click(828, 361); // SAVE
+	await wait(1000);
+	const saved = await ev(() => {
+		const d = window.dls.Project.ActiveProject.chipLibrary.GetChipDescription("DISP");
+		return d ? { size: [d.Size.x, d.Size.y], displays: d.Displays?.length ?? 0 } : null;
+	});
+	console.log(" saved:", JSON.stringify(saved));
+	check(saved && saved.displays === 1 && saved.size[0] === confirmed.size[0], "customized chip saved to library");
 	await h.finish();
 })();
