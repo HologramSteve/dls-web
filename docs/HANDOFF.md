@@ -3,7 +3,7 @@
 Faithful port of SebLague/Digital-Logic-Sim (Unity C#, v2.1.6) to TypeScript + WebGL2 + Web Worker. No engine.
 Original source for reference: `git clone --depth 1 https://github.com/SebLague/Digital-Logic-Sim /tmp/dls`
 (scripts in `Assets/Scripts/{Seb,Simulation,Description,SaveSystem,Game,Graphics}`).
-Architecture overview: `docs/architecture.md`.
+Architecture overview: `docs/architecture.md`. How the port was done + C#→TS mapping: `docs/porting.md`.
 
 ## Status
 ALL original C# files are ported (Seb lib, Description, SaveSystem, Simulation, Game, Graphics incl. every menu).
@@ -36,14 +36,16 @@ click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import roun
 1. Performance in headless Chromium + SwiftShader (software GL) is poor (~4-20 fps) because the bezier text
    fragment shader (same algorithm as the original TextShader) is expensive on a CPU rasterizer. Expected fine on
    real GPUs but NOT yet verified on hardware. If needed: cache text into an atlas or skip curves by bbox.
-2. Not yet exercised interactively: customization edits (resize handles, placing/scaling displays), library
-   operations (move/rename/delete collections & chips), rename/delete/duplicate projects, ROM edit + paste, bus chips,
-   pulse edit, LED colour, RGB/dot displays, buzzer sound, the file picker / download UI of import/export.
-   Testing tip: Playwright's keyboard.press releases instantly; hold modifier+key for ~300ms each (frames are slow).
-3. DONE: `scripts/e2e.cjs` (`npm run e2e` with the dev server on :5173) — smoke test of main menu, placing, wiring,
-   NAND simulation, MainTest import + ALU-8/demo. Extend it. Notes: launch chromium with
-   `['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']`, use waits >= 400ms between input
-   events because frames are slow; move the mouse before pressing so hover is registered).
+2. Verified in the browser by `scripts/e2e-features.cjs`: every display/IO builtin placed, ROM editor (edit, display
+   modes, confirm), context actions (pulse width, LED colour, key rebind, bus flip, label), RGB display driven by the
+   sim, save + customize (resize handles, placing a display), library (move/star/new collection, jump chip, delete
+   chip -> backup in "Deleted Chips" like the original), project duplicate/rename/delete/open, preferences menu.
+   Still untested interactively: preference changes being applied (grid/pause toggles), dot display visuals, buzzer
+   sound output on real speakers, the file picker / download UI of import/export (logic is tested).
+3. Browser tests: `npm run e2e` (smoke) and `node scripts/e2e-features.cjs [shotDir]` (features), both need the dev
+   server on :5173. Helpers in `scripts/e2eHelpers.cjs`. Launch flags for software GL are set there; waits >= 300ms
+   between input events because headless frames are slow. Context menus open upward near the bottom of the screen.
+   Unit tests: `tests/chips.test.ts` (MainTest chips incl. RAM/PC/registers), `tests/builtins.test.ts` (every builtin).
 4. Remove the `window.dls` hook / Draw.Debug* getters if undesired (harmless).
 
 ## Porting conventions (important)

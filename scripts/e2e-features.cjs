@@ -311,5 +311,21 @@ const { launch } = require("./e2eHelpers.cjs");
 	await ev(() => window.dls.UIDrawer.SetActiveMenu(5));
 	await wait(800);
 	await h.shot("f30_prefs");
+	await h.click(977, 219); // grid -> On
+	await h.click(977, 423); // sim -> Paused
+	await h.click(817, 593); // CONFIRM
+	await wait(600);
+	const prefs = await ev(() => {
+		const d = window.dls.Project.ActiveProject.description;
+		return [d.Prefs_GridDisplayMode, d.Prefs_SimPaused];
+	});
+	console.log(" prefs:", JSON.stringify(prefs));
+	check(prefs[0] === 1 && prefs[1] === true, "preferences applied (grid on, sim paused)");
+	await h.move(640, 400);
+	await wait(800);
+	await h.shot("f31_grid_paused");
+	await h.combo("Control", " "); // Ctrl+Space resumes
+	await wait(500);
+	check((await ev(() => window.dls.Project.ActiveProject.description.Prefs_SimPaused)) === false, "Ctrl+Space toggles pause");
 	await h.finish();
 })();
