@@ -202,5 +202,58 @@ const { launch } = require("./e2eHelpers.cjs");
 	});
 	console.log(" saved:", JSON.stringify(saved));
 	check(saved && saved.displays === 1 && saved.size[0] === confirmed.size[0], "customized chip saved to library");
+
+	// ---- Library menu ----
+	await ev(() => window.dls.UIDrawer.SetActiveMenu(2));
+	await wait(800);
+	await h.shot("f16_library");
+	const lib = () =>
+		ev(() => {
+			const d = window.dls.Project.ActiveProject.description;
+			return { cols: d.ChipCollections.map((c) => c.Name + ":" + c.Chips.length), starred: d.StarredList.map((s) => s.Name) };
+		});
+	await h.click(1151, 124); // MOVE DOWN
+	await h.click(1076, 83); // ADD TO STARRED
+	let l = await lib();
+	console.log(" library:", JSON.stringify(l));
+	check(l.cols[0].startsWith("IN/OUT") && l.cols[1].startsWith("BASIC"), "collection moved down");
+	check(l.starred.includes("BASIC"), "collection starred");
+	await h.click(1076, 239); // NEW COLLECTION
+	await wait(500);
+	await h.shot("f17_new_collection");
+	await h.type("MINE");
+	await h.key("Enter");
+	await wait(500);
+	l = await lib();
+	check(l.cols.some((c) => c.startsWith("MINE")), "new collection created");
+	await h.click(560, 281); // OTHER
+	await wait(400);
+	await h.shot("f18_other_open");
+	await h.click(551, 344); // DISP chip
+	await wait(400);
+	await h.shot("f19_chip_selected");
+	await h.click(1151, 197); // JUMP DOWN -> moves into next collection
+	l = await lib();
+	console.log(" library:", JSON.stringify(l));
+	check(l.cols.includes("MINE:1") && l.cols.includes("OTHER:1"), "chip jumped to next collection");
+	await h.shot("f20_jumped");
+	await h.click(1176, 239); // DELETE
+	await wait(500);
+	await h.shot("f21_delete_confirm");
+	await h.click(1151, 422); // confirm DELETE
+	await wait(800);
+	l = await lib();
+	console.log(" library:", JSON.stringify(l));
+	check(!l.starred.includes("DISP") && l.cols.includes("MINE:0"), "chip deleted from library and starred");
+	const after = await ev(async () => {
+		const fs = (await import("/src/dls/saveSystem/FileSystem.ts")).FileSystem;
+		return { exists: window.dls.Project.ActiveProject.chipLibrary.HasChip("DISP"), viewed: window.dls.Project.ActiveProject.ViewedChip.ChipName, files: fs.GetFilesRecursive("Projects/DisplayTest") };
+	});
+	console.log(" after delete:", JSON.stringify(after));
+	check(!after.exists && !after.files.some((f) => f.includes("DISP.json")), "chip removed from chip library and storage");
+	await h.shot("f22_deleted");
+	await h.click(1076, 280); // EXIT LIBRARY (panel shrinks back)
+	await wait(500);
+	await h.shot("f23_exit_library");
 	await h.finish();
 })();
