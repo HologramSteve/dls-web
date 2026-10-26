@@ -16,4 +16,8 @@ serde_json = "1"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+# WebAssembly build: cargo build --profile wasm --target wasm32-unknown-unknown
+[profile.wasm]
+inherits = "release"
 panic = "abort"

@@ -138,6 +138,7 @@ pub extern "C" fn dls_out_ptr() -> *const i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dls_snapshot_view(p: *const i32, n: usize) -> i32 {
 	let e = engine();
+	e.sync_state();
 	let Some(c) = e.resolve_path(slice(p, n)) else { return -1 };
 	OUT.clear();
 	let ch = &e.chips[c as usize];
@@ -166,6 +167,7 @@ pub unsafe extern "C" fn dls_snapshot_view(p: *const i32, n: usize) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn dls_display(p: *const i32, n: usize) -> i32 {
 	let e = engine();
+	e.sync_state();
 	let Some(c) = e.resolve_path(slice(p, n)) else { return -1 };
 	OUT.clear();
 	let ch = &e.chips[c as usize];

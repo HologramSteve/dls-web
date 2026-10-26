@@ -24,7 +24,8 @@ fn random_inputs(desc: &SimChipDesc, rng: &mut XorShift) -> Vec<(i32, u32)> {
 	desc.input_ids.iter().zip(&desc.input_bits).map(|(&id, &b)| (id as i32, rng.next_u32() & ((1u32 << b) - 1))).collect()
 }
 
-fn root_outputs(e: &Engine) -> Vec<u32> {
+fn root_outputs(e: &mut Engine) -> Vec<u32> {
+	e.sync_state();
 	e.chips[e.root as usize].outputs.iter().map(|&p| e.hot.state[p as usize]).collect()
 }
 
@@ -43,10 +44,24 @@ fn fast_path_matches_reference_bit_for_bit() {
 				a.set_inputs(&ins);
 				b.set_inputs(&ins);
 			}
+			// Edit the circuit now and then (remove + re-add a wire): forces an order pass, which reads the ready
+			// counters that the fast path reconstructs instead of tracking
+			if step % 150 == 149 {
+				if let Some(w) = d.wires.first() {
+					for e in [&mut a, &mut b] {
+						e.apply(Command::RemoveConnection { target: vec![], source: w.source, dest: w.target }).unwrap();
+						e.apply(Command::AddConnection { target: vec![], source: w.source, dest: w.target }).unwrap();
+					}
+				}
+			}
 			a.run_step(0.0);
 			b.run_step(0.0);
+			b.sync_state();
 			assert_eq!(a.hot.state, b.hot.state, "{}: pin states differ at step {step}", d.name);
-			assert_eq!(a.hot.ready, b.hot.ready, "{}: ready counters differ at step {step}", d.name);
+			// Ready counters are only maintained on hierarchical frames by the fast engine
+			if b.frame() % 100 == 1 {
+				assert_eq!(a.hot.ready, b.hot.ready, "{}: ready counters differ at step {step}", d.name);
+			}
 			if step % 50 == 0 {
 				assert_eq!(a.hot.latest_id.len(), b.hot.latest_id.len());
 			}
@@ -74,7 +89,7 @@ fn truth_tables_give_identical_outputs_on_combinational_chips() {
 			b.set_inputs(&ins);
 			a.run_step(0.0);
 			b.run_step(0.0);
-			assert_eq!(root_outputs(&a), root_outputs(&b), "{name}: outputs differ at step {step}");
+			assert_eq!(root_outputs(&mut a), root_outputs(&mut b), "{name}: outputs differ at step {step}");
 		}
 		println!("{name}: {} tabled instances, tables: {:?}", b.program.tabled_chips, b.tables.tables.iter().map(|t| format!("{}({}b)", t.name, t.in_bits.iter().map(|&x| x as u32).sum::<u32>())).collect::<Vec<_>>());
 	}
@@ -97,7 +112,7 @@ fn sequential_chips_with_tables() {
 
 	let d = get("REGISTER-8");
 	let mut e = engine(&lib, "REGISTER-8", 3, true, true);
-	let mut clock = |e: &mut Engine, data: u32, store: u32| {
+	let clock = |e: &mut Engine, data: u32, store: u32| {
 		run(e, &d, &[data, store, 0], 40);
 		run(e, &d, &[data, store, 1], 40);
 		run(e, &d, &[data, store, 0], 40)[0]
@@ -108,7 +123,7 @@ fn sequential_chips_with_tables() {
 
 	let d = get("PC");
 	let mut e = engine(&lib, "PC", 4, true, true);
-	let mut tick = |e: &mut Engine, inp: u32, store: u32, inc: u32, reset: u32| {
+	let tick = |e: &mut Engine, inp: u32, store: u32, inc: u32, reset: u32| {
 		run(e, &d, &[inp, store, 0, inc, reset], 80);
 		run(e, &d, &[inp, store, 1, inc, reset], 80);
 		run(e, &d, &[inp, store, 0, inc, reset], 80)[0]
@@ -156,19 +171,55 @@ fn swap_patching_matches_recompile() {
 			assert!(e.program.swap_units(&e.chips, first, second));
 		}
 		let normalized = |p: &dls_sim::program::Program| -> Vec<String> {
-			p.ops
+			p.raw
 				.iter()
 				.map(|op| match op {
 					dls_sim::program::Op::Table { inst, skip } => {
 						let ti = &p.table_insts[*inst as usize];
-						format!("Table {} {:?} {:?} {skip}", ti.table, ti.inputs, ti.outputs)
+						format!("Table {} {:?} {:?} {skip}", ti.table, ti.raw_inputs, ti.outputs)
 					}
 					o => format!("{o:?}"),
 				})
 				.collect()
 		};
 		let patched = normalized(&e.program);
+		let root_inputs = e.chips[e.root as usize].inputs.clone();
+		e.program.optimize(&e.chips, e.pins.len(), &root_inputs);
+		let patched_opt = format!("{:?} {:?}", e.program.ops.len(), e.program.aliases);
 		e.compile();
 		assert!(patched == normalized(&e.program), "{name}: patched program differs from recompiled");
+		assert_eq!(patched_opt, format!("{:?} {:?}", e.program.ops.len(), e.program.aliases), "{name}: optimization differs");
+	}
+}
+
+#[test]
+#[ignore]
+fn op_stats() {
+	let lib = library();
+	for name in ["RAM-sync", "WIP2"] {
+		let mut e = engine(&lib, name, 1, true, true);
+		for _ in 0..3 {
+			e.run_step(0.0);
+		}
+		let mut counts = std::collections::BTreeMap::new();
+		println!("{name}: raw ops {}, optimized ops {}, aliased pins {}", e.program.raw.len(), e.program.ops.len(), e.program.aliases.len());
+		for op in &e.program.ops {
+			let k = format!("{op:?}");
+			let k = k.split(' ').next().unwrap().to_string();
+			*counts.entry(k).or_insert(0) += 1;
+		}
+		let builtins: std::collections::BTreeMap<u8, usize> = e.program.ops.iter().filter_map(|op| if let dls_sim::program::Op::Builtin { chip } = op { Some(e.chips[*chip as usize].chip_type) } else { None }).fold(Default::default(), |mut m, t| { *m.entry(t).or_insert(0) += 1; m });
+		println!("{name}: {} pins, {} chips, ops {:?}, builtin types {:?}", e.pins.len(), e.chips.len(), counts, builtins);
+		for _ in 0..500 {
+			e.run_step(0.0);
+		}
+		let mut per_table: std::collections::BTreeMap<String, (u64, u64, u32)> = Default::default();
+		for ti in &e.program.table_insts {
+			let r = per_table.entry(e.tables.tables[ti.table as usize].name.clone()).or_default();
+			r.0 += ti.hits as u64;
+			r.1 += ti.misses as u64;
+			r.2 += 1;
+		}
+		println!("  table (hits, misses, instances): {per_table:?}");
 	}
 }

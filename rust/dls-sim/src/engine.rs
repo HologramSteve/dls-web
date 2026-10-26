@@ -135,6 +135,10 @@ pub struct Engine {
 	pub use_tables: bool,
 	pub tables: TableCache,
 	swaps: Vec<(u32, u32)>,
+	/// The previous frame ran the compiled program (ready counters must be restored before a hierarchical frame)
+	last_frame_fast: bool,
+	/// Aliased pins (see Program::optimize) have not been written since the program last ran
+	state_stale: bool,
 	/// Statistics: number of dynamic-reorder swaps patched into the program / full recompiles
 	pub stat_swaps: u64,
 	pub stat_compiles: u64,
@@ -164,6 +168,8 @@ impl Engine {
 			use_tables: true,
 			tables: TableCache::default(),
 			swaps: Vec::new(),
+			last_frame_fast: false,
+			state_stale: false,
 			stat_swaps: 0,
 			stat_compiles: 0,
 		};
@@ -360,6 +366,7 @@ impl Engine {
 
 	/// Simulator.ApplyModification
 	pub fn apply(&mut self, cmd: Command) -> Result<(), SimError> {
+		self.sync_state();
 		self.needs_order_pass = true;
 		self.program_dirty = true;
 		match cmd {
@@ -478,6 +485,13 @@ impl Engine {
 			}
 		}
 
+		let hierarchical = self.needs_order_pass || can_dynamic_reorder || !self.use_fast_path;
+		if hierarchical && self.last_frame_fast {
+			self.restore_ready_counters();
+			self.sync_state();
+		}
+		self.last_frame_fast = !hierarchical;
+
 		if self.needs_order_pass {
 			self.step_chip_reorder(self.root);
 			self.needs_order_pass = false;
@@ -495,6 +509,11 @@ impl Engine {
 					}
 				}
 				self.swaps = swaps;
+				if !self.program_dirty {
+					self.program.compute_late_ready(&self.chips, &self.pins);
+					let root_inputs = self.chips[self.root as usize].inputs.clone();
+					self.program.optimize(&self.chips, self.pins.len(), &root_inputs);
+				}
 			}
 		} else {
 			if self.program_dirty {
@@ -504,6 +523,13 @@ impl Engine {
 		}
 
 		self.update_audio_state(now_ms);
+	}
+
+	/// Set numInputsReady of every chip to the value it has after a frame of the compiled program
+	fn restore_ready_counters(&mut self) {
+		let late = &self.program.late_ready;
+		let n = late.len().min(self.hot.ready.len());
+		self.hot.ready[..n].copy_from_slice(&late[..n]);
 	}
 
 	pub fn update_in_paused_state(&mut self, now_ms: f64) {
@@ -519,6 +545,7 @@ impl Engine {
 	}
 
 	pub fn compile(&mut self) {
+		self.sync_state();
 		let mut program = std::mem::take(&mut self.program);
 		program.compile(self);
 		self.program = program;
@@ -526,9 +553,19 @@ impl Engine {
 		self.program_dirty = false;
 	}
 
-	fn run_program(&mut self) {
+	pub fn run_program(&mut self) {
 		let Engine { program, chips, pins, hot, ctx, tables, .. } = self;
 		program.run(chips, pins, hot, ctx, tables);
+		self.state_stale = !self.program.aliases.is_empty();
+	}
+
+	/// Bring every pin's stored state up to date. Must be called before reading `hot.state` from outside the
+	/// engine (snapshots, displays, tests) after fast-path frames.
+	pub fn sync_state(&mut self) {
+		if self.state_stale {
+			self.program.materialize(&mut self.hot.state);
+			self.state_stale = false;
+		}
 	}
 
 	// ---- Hierarchical (reference) step: ports of StepChip / StepChipReorder ----
@@ -538,7 +575,7 @@ impl Engine {
 		let n = self.pins[p as usize].targets.len();
 		for k in 0..n {
 			let t = self.pins[p as usize].targets[k];
-			receive_input(&self.pins, &self.chips, &mut self.hot, &mut self.ctx.pcg, self.ctx.frame, t, p);
+			receive_input::<true>(&self.pins, &self.chips, &mut self.hot, &mut self.ctx.pcg, self.ctx.frame, t, p);
 		}
 	}
 
@@ -644,7 +681,7 @@ impl Engine {
 
 /// SimPin.ReceiveInput
 #[inline]
-pub fn receive_input(pins: &[PinInst], chips: &[ChipInst], hot: &mut Hot, pcg: &mut u32, frame: u32, t: u32, src: u32) {
+pub fn receive_input<const TRACK_READY: bool>(pins: &[PinInst], chips: &[ChipInst], hot: &mut Hot, pcg: &mut u32, frame: u32, t: u32, src: u32) {
 	let ti = t as usize;
 	if hot.last_frame[ti] != frame {
 		hot.last_frame[ti] = frame;
@@ -675,7 +712,7 @@ pub fn receive_input(pins: &[PinInst], chips: &[ChipInst], hot: &mut Hot, pcg: &
 	}
 	hot.recv[ti] += 1;
 	let tp = &pins[ti];
-	if tp.is_input && hot.recv[ti] == tp.num_input_connections {
+	if TRACK_READY && tp.is_input && hot.recv[ti] == tp.num_input_connections {
 		hot.ready[tp.parent as usize] += 1;
 	}
 }

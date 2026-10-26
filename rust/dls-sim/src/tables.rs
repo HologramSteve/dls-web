@@ -256,6 +256,7 @@ fn build_table(e: &mut Engine, name: &str, hash: u64) -> Option<u32> {
 				shift += b;
 			}
 			tmp.run_step(0.0);
+			tmp.sync_state();
 			for (j, &o) in outputs.iter().enumerate() {
 				data[row as usize * n_out + j] = tmp.hot.state[o as usize];
 			}
