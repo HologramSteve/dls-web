@@ -14,6 +14,7 @@ import { IsMoveable, type IMoveable } from "./elements/Interfaces";
 import { PinInstance } from "./elements/PinInstance";
 import { SubChipInstance } from "./elements/SubChipInstance";
 import { ConnectionInfo, WireInstance } from "./elements/WireInstance";
+import { CollabState } from "../../collab/CollabState";
 import { GridHelper, IDGenerator } from "./GridHelper";
 import { InteractionState } from "./InteractionState";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
@@ -63,7 +64,8 @@ export class ChipInteractionController {
 	}
 
 	get HasControl(): boolean {
-		return !UIDrawer.InInputBlockingMenu() && this.project.CanEditViewedChip;
+		// (web: viewers in a live collaboration room can't edit)
+		return !UIDrawer.InInputBlockingMenu() && this.project.CanEditViewedChip && !CollabState.ReadOnly;
 	}
 
 	// Cannot interact with elements when other elements are being moved, in a menu, or drawing a selection box

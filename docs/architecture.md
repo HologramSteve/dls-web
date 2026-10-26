@@ -22,6 +22,8 @@ index.html ── src/main.ts (UnityMain: boot + requestAnimationFrame loop)
                 │
                 ├─ src/worker/simWorker.ts   Simulation thread replacement; engines.ts: JS engine / Rust (WASM) engine
                 │
+                ├─ src/collab/              Live collaboration client (web-only), see docs/collaboration.md
+                │
                 └─ rust/dls-sim/              Rust simulation engine (same semantics, compiled + truth tables), built to
                                               src/worker/dls_sim.wasm — see docs/rust-engine.md
 ```
@@ -29,8 +31,8 @@ index.html ── src/main.ts (UnityMain: boot + requestAnimationFrame loop)
 ## Frame loop (main thread)
 `Time.BeginFrame → InputHelper.BeginFrame → Draw.BeginFrame → Main.Update → Draw.Render`
 
-`Main.Update` (same as the original): CameraController.Update → Project.Update (input, controller, sim sync) →
-InteractionState.ClearFrame → WorldDrawer.DrawWorld → UIDrawer.Draw.
+`Main.Update` (same as the original, plus two web-only calls): Collab.Update (sync, presence) → CameraController.Update → Project.Update (input, controller, sim sync) →
+InteractionState.ClearFrame → WorldDrawer.DrawWorld → PresenceDrawer.Draw → UIDrawer.Draw.
 
 ## Simulation
 The original runs the simulator on a dedicated thread that directly reads/writes game objects. Here:
@@ -55,3 +57,7 @@ curve data stored in float textures. UI is laid out in a 100-unit-wide virtual c
 `FileSystem` keeps all files in memory (so the ported synchronous save/load code works unchanged) and writes through to
 IndexedDB. Paths mirror the original (`Projects/<name>/ProjectDescription.json`, `Projects/<name>/Chips/*.json`).
 Projects can be exported/imported as zip files in that same layout, so they move between the web and desktop versions.
+
+## Collaboration server
+`server/index.ts` (Bun) serves `dist/` and a WebSocket at `/ws`; `server/rooms.ts` holds rooms in memory, orders
+chip edits and relays them, and persists rooms to `DATA_DIR`. The client is `src/collab/`. See docs/collaboration.md.

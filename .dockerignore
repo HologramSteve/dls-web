@@ -1,0 +1,6 @@
+.git
+node_modules
+dist
+data
+rust/dls-sim/target
+*.log

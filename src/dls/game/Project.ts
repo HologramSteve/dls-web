@@ -34,7 +34,8 @@ export class Project {
 	static ActiveProject: Project;
 	static readonly SimulationPerformanceTimeWindowSec = 1.5;
 
-	readonly chipLibrary: ChipLibrary;
+	// (web: not readonly, live collaboration replaces it when other users change the library)
+	chipLibrary: ChipLibrary;
 
 	controller!: ChipInteractionController;
 	description: ProjectDescription;

@@ -9,7 +9,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "server": "bun server/index.ts",
+    "dev:server": "bun --watch server/index.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p server",
     "test": "vitest run",
     "bench": "vitest bench --run",
     "lint": "biome lint --error-on-warnings .",
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",
+    "@types/bun": "^1.4.4",
     "@types/node": "^22.20.5",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",

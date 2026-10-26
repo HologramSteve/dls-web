@@ -32,3 +32,17 @@ jobs:
         run: cargo test --release --manifest-path rust/dls-sim/Cargo.toml
       - name: Build WebAssembly
         run: cargo build --manifest-path rust/dls-sim/Cargo.toml --profile wasm --target wasm32-unknown-unknown
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t dls-web .
+      - name: Smoke test (app + health check + websocket)
+        run: |
+          docker run -d --name dls -p 8787:8787 dls-web
+          for i in $(seq 1 30); do curl -sf http://localhost:8787/healthz && break; sleep 1; done
+          curl -sf http://localhost:8787/ | grep -q "<html"
+          docker exec dls bun -e "const ws = new WebSocket('ws://localhost:8787/ws'); ws.onopen = () => { console.log('websocket ok'); process.exit(0); }; ws.onerror = () => process.exit(1); setTimeout(() => process.exit(1), 5000);"
+          docker logs dls

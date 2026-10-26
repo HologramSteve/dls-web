@@ -3,3 +3,4 @@ dist
 *.log
 .vite
 rust/dls-sim/target/
+data

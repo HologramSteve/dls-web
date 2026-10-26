@@ -1,4 +1,6 @@
 // Entry point: port of DLS.Game.UnityMain (Awake / Update), driven by requestAnimationFrame instead of the Unity player loop.
+import { Collab } from "./collab/Collab";
+import { CollabPanel } from "./collab/CollabPanel";
 import { AudioState } from "./dls/game/audio/AudioState";
 import { CameraController } from "./dls/game/CameraController";
 import { InteractionState } from "./dls/game/InteractionState";
@@ -27,6 +29,7 @@ async function Awake() {
 	ResetStatics();
 	Main.Init(audioState);
 	Main.LoadMainMenu();
+	CollabPanel.Init(); // (web: live collaboration panel)
 
 	// Make sure saves are flushed to IndexedDB before the page goes away
 	window.addEventListener("pagehide", () => void FileSystem.sync());
@@ -36,7 +39,7 @@ async function Awake() {
 	});
 
 	// Debug/test hook (used by browser tests to locate elements)
-	(window as unknown as { dls: unknown }).dls = { Project, WorldCam, UIDrawer, IS: InteractionState, Main, Draw, SimHost };
+	(window as unknown as { dls: unknown }).dls = { Project, WorldCam, UIDrawer, IS: InteractionState, Main, Draw, SimHost, Collab };
 
 	requestAnimationFrame(Update);
 }

@@ -1,4 +1,6 @@
 // Port of DLS.Game.Main
+import { Collab } from "../../collab/Collab";
+import { PresenceDrawer } from "../../collab/PresenceDrawer";
 import { type AppSettings, type ProjectDescription } from "../description/Types";
 import { FormatDateTime } from "../description/Serializer";
 import { PreferencesMenu } from "../graphics/ui/menus/PreferencesMenu";
@@ -39,12 +41,16 @@ export const Main = {
 	},
 
 	Update() {
+		// (web: live collaboration — apply remote changes / send local ones)
+		Collab.Update();
+
 		if (UIDrawer.ActiveMenu !== MenuType.MainMenu) {
 			CameraController.Update();
 			Main.ActiveProject.Update();
 
 			InteractionState.ClearFrame();
 			WorldDrawer.DrawWorld(Main.ActiveProject);
+			PresenceDrawer.Draw();
 		}
 
 		UIDrawer.Draw();

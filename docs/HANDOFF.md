@@ -10,6 +10,7 @@ engine. A Rust simulation engine, compiled to WebAssembly, is the default and is
   - `docs/architecture.md`: runtime structure.
   - `docs/rust-engine.md`: engine design and why it is exact.
   - `docs/performance.md`: benchmarks.
+  - `docs/collaboration.md`: live collaboration (rooms, server, sync design).
 
 ## Current state (2026-10-26)
 
@@ -17,10 +18,9 @@ engine. A Rust simulation engine, compiled to WebAssembly, is the default and is
   branch, then fast-forward `main` when asked.
 - **Tooling:** Bun (`bun.lock`; `packageManager: bun@1.4.4`). CI (`.github/workflows/ci.yml`) has two jobs:
   - `check`: bun install, typecheck, lint, test, build;
-  - `rust`: cargo test, then the WebAssembly build.
-
-  Both are green on `main`.
-- **Checks:** `bun run check` (55 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
+  - `rust`: cargo test, then the WebAssembly build;
+  - `docker`: builds the server image and smoke-tests it (health check, app, WebSocket).
+- **Checks:** `bun run check` (67 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
   `bun run e2e`, and `bun scripts/e2e-features.cjs` all pass.
 
 ### Port (phase 1): complete
@@ -65,9 +65,26 @@ Verified in headless Chromium (Playwright):
 - **Results:** in Node/WebAssembly, ALU-8 runs 33× faster than JS and RAM-sync 21×. In the browser, RAM-sync runs
   at about 3,900 steps/s vs 235. See `docs/performance.md` and `docs/benchmarks.json`.
 
+### Live collaboration (phase 3): complete
+Rooms with codes on one central server (`server/`, Bun), client in `src/collab/`. Full description:
+`docs/collaboration.md`.
+- **Sync.** Project files sync through a `FileSystem.onChange` hook. The edited chip syncs element by element
+  (server-ordered ops, pending-op protection, hash resync). Presence: cursors, selections, drag ghosts and wires.
+- **Rooms.** Roles (owner/editor/viewer), lock, kick/ban, ownership transfer, invite links, auto reconnect.
+- **Background tabs.** Background tabs compact their message queue (`CompactInbox`) and hide their cursor. The
+  server drops presence updates for clients that stop reading, and disconnects them past 128 MB.
+- **Tests.** `tests/collab.test.ts` covers:
+  - protocol diff/apply;
+  - convergence of 3 clients over 200 random interleavings;
+  - inbox compaction;
+  - RoomManager (roles, bans, persistence);
+  - ChipSync on real chips from the test project.
+  The server was smoke-tested over real WebSockets. `scripts/e2e-collab.cjs` is a two-browser test: create a room,
+  join by link and the member list passed in a browser; its later steps haven't been run yet.
+
 ### Web-specific additions / deviations (keep documented here)
 - **Test hook.** `src/main.ts` is UnityMain (the requestAnimationFrame loop). It exposes `window.dls` (Project,
-  WorldCam, UIDrawer, IS, Main, Draw, SimHost) for browser tests.
+  WorldCam, UIDrawer, IS, Main, Draw, SimHost, Collab) for browser tests.
 - **Import/export.** On the main menu, "QUIT" is replaced by "IMPORT": zip(s) of projects, or hold Shift to pick a
   folder. The open-project screen has an extra "EXPORT" button. Code: `src/dls/saveSystem/ProjectTransfer.ts`.
 - **Display settings.** Only fullscreen on/off is applied. The default AppSettings fullscreenMode is Windowed (3).
@@ -80,6 +97,14 @@ Verified in headless Chromium (Playwright):
 - **Input.** A press and release within one frame delivers the release on the next frame (`InputHelper`).
 - **ROM "PASTE ALL"** uses `navigator.clipboard.readText`, falling back to the next Ctrl+V paste event.
 - **Audio** uses an AudioWorklet, started on the first pointer or key press.
+- **Live collaboration** (`src/collab/`, `server/`). Hooks into ported code:
+  - `FileSystem.onChange`;
+  - `Project.chipLibrary` is no longer readonly;
+  - `ChipInteractionController.HasControl` checks `CollabState.ReadOnly`;
+  - `Main.Update` calls `Collab.Update()` and `PresenceDrawer.Draw()`;
+  - `main.ts` starts `CollabPanel`, and `window.dls` includes `Collab`.
+
+  The panel is a DOM overlay, not ported UI.
 - **Reserved shortcuts.** Ctrl+N / Ctrl+Q / Ctrl+W can't be intercepted; use the MENU popup buttons.
 
 ### Known issues / next steps
@@ -95,7 +120,11 @@ Verified in headless Chromium (Playwright):
    - a dedicated exact op for latch patterns, since RAM-sync is latch-bound;
    - multi-worker simulation for very large circuits;
    - building tables asynchronously, since table building briefly blocks the worker on load (2–60 ms per circuit).
-4. **Test hooks.** Remove the `window.dls` hook and the `Draw.Debug*` getters if undesired (they're harmless).
+4. **Collaboration next steps:**
+   - run the rest of `scripts/e2e-collab.cjs` (it needs Playwright, which isn't a devDependency);
+   - a synced simulation clock (simulation is local per client);
+   - per-user undo that skips others' edits.
+5. **Test hooks.** Remove the `window.dls` hook and the `Draw.Debug*` getters if undesired (they're harmless).
 
 ### Gotchas for the next session
 - **Never edit source files while a browser test runs.** Vite reloads the page and the test fails with "project
