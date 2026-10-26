@@ -146,4 +146,25 @@ describe("builtin chips", () => {
 		step(root, [9, 0, 0, 0, 0]);
 		expect(PinState.GetBitStates(step(root, [9, 0, 0, 0, 0])[0])).toBe(77);
 	});
+
+	it("BUZZER registers its note with the audio state", async () => {
+		// inputs: PITCH (8 bit), VOLUME (4 bit)
+		const root = build([1, 2], [], [{ Name: "BUZZER", ID: 10 }], [
+			[1, 0, 10, 1],
+			[2, 0, 10, 0],
+		]);
+		const amps = Simulator.audioState.targetAmplitudesPerFreq;
+		for (let i = 0; i < 5; i++) {
+			step(root, [40, 15], 1);
+			await new Promise((r) => setTimeout(r, 5));
+		}
+		expect(amps[40]).toBeGreaterThan(0);
+		expect(amps[41]).toBe(0);
+		// silence decays back to zero
+		for (let i = 0; i < 40; i++) {
+			step(root, [40, 0], 1);
+			await new Promise((r) => setTimeout(r, 5));
+		}
+		expect(amps[40]).toBeLessThan(0.01);
+	});
 });

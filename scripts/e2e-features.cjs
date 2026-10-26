@@ -306,5 +306,10 @@ const { launch } = require("./e2eHelpers.cjs");
 	await h.click(1005, 608); // OPEN
 	await wait(1500);
 	check((await ev(() => window.dls.Project.ActiveProject?.description.ProjectName)) != null, "project opened from list");
+
+	// ---- Preferences ----
+	await ev(() => window.dls.UIDrawer.SetActiveMenu(5));
+	await wait(800);
+	await h.shot("f30_prefs");
 	await h.finish();
 })();
