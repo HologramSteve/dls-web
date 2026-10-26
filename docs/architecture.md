@@ -20,7 +20,10 @@ index.html ── src/main.ts (UnityMain: boot + requestAnimationFrame loop)
                 │   └─ graphics/       DrawSettings (themes), WorldDrawer, DevSceneDrawer, CustomizationSceneDrawer,
                 │                      WireLayoutHelper, ui/ (UIDrawer, MenuHelper, menus/*)
                 │
-                └─ src/worker/simWorker.ts   Simulation thread replacement
+                ├─ src/worker/simWorker.ts   Simulation thread replacement; engines.ts: JS engine / Rust (WASM) engine
+                │
+                └─ rust/dls-sim/              Rust simulation engine (same semantics, compiled + truth tables), built to
+                                              src/worker/dls_sim.wasm — see docs/rust-engine.md
 ```
 
 ## Frame loop (main thread)
@@ -40,6 +43,8 @@ The original runs the simulator on a dedicated thread that directly reads/writes
 - The worker steps at the target rate in time slices and replies with a `Snapshot` (pin states of the viewed chip,
   display data, ticks/sec, audio amplitudes).
 - Custom chip definitions are synced to the worker by `ChipLibrary` (`Simulator.SyncLibrary`).
+- The worker runs one of two engines behind the same interface (`src/worker/engines.ts`): the Rust engine compiled
+  to WebAssembly (default) or the TS port of the original simulator (`?engine=js`). The protocol is unchanged.
 
 ## Rendering
 `Draw` batches instances (16 floats each) into layers; each layer draws shapes then text (2 instanced draw calls).

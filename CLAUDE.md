@@ -14,13 +14,17 @@ Web port of Sebastian Lague's **Digital Logic Sim** (Unity/C#, MIT) to the brows
   to branch `claude/blissful-brahmagupta-8yaivk`.
 
 - Web-only additions (zip import/export, worker pacing, input tweaks) are listed in `docs/HANDOFF.md`; keep that list current.
+- Rust engine (`rust/dls-sim`, docs/rust-engine.md) must keep the exact semantics of `src/dls/simulation/Simulator.ts`:
+  change both together, then `npm run build:wasm` (the .wasm is committed) and run `npm run test:rust` + `npm test`.
 
 ## Commands
 - `npm install`, `npm run dev`, `npm run build`, `npm run typecheck`, `npm test`, `npm run check` (all of typecheck+lint+test)
+- Rust: `npm run build:wasm`, `npm run test:rust`, `npm run bench:rust` (needs stable Rust + `wasm32-unknown-unknown`)
 
 ## Layout
 - `src/seb/` — port of the Seb library (types, helpers, Draw/WebGL renderer, text, immediate-mode UI)
 - `src/dls/` — port of DLS (description, saveSystem, simulation, game, graphics)
-- `src/worker/` — simulation Web Worker
+- `src/worker/` — simulation Web Worker (`engines.ts`: JS engine / Rust WASM engine; `dls_sim.wasm` is a build output)
+- `rust/dls-sim/` — Rust simulation engine (native tests + benchmark, WebAssembly API)
 - `public/fonts/` — fonts from the original repo (JetBrains Mono NL, Born2bSporty)
 - `testdata/Projects/` — original test project (for import tests)

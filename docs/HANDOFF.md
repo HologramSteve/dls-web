@@ -4,6 +4,7 @@ Faithful port of SebLague/Digital-Logic-Sim (Unity C#, v2.1.6) to TypeScript + W
 Original source for reference: `git clone --depth 1 https://github.com/SebLague/Digital-Logic-Sim /tmp/dls`
 (scripts in `Assets/Scripts/{Seb,Simulation,Description,SaveSystem,Game,Graphics}`).
 Architecture overview: `docs/architecture.md`. How the port was done + C#→TS mapping: `docs/porting.md`.
+Rust simulation engine (WebAssembly, default in the worker): `docs/rust-engine.md`.
 
 ## Status
 ALL original C# files are ported (Seb lib, Description, SaveSystem, Simulation, Game, Graphics incl. every menu).
@@ -16,6 +17,13 @@ import of `testdata/Projects/MainTest` (ALU-8 and demo with 7-seg displays rende
 customize / context menus render like the original. KEY chip responds to held keys. AudioWorklet starts on first
 click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import round trip (ProjectTransfer). Production build (`vite build` + `vite preview`) runs the worker at the 1000 steps/s target.
 
+### Rust simulation engine (added after the port)
+`rust/dls-sim`: same semantics as `Simulator.ts` (verified bit-for-bit against a reference port of StepChip), compiled
+flat program + exact truth tables for combinational chips; ~25-120x faster than the JS engine in the browser.
+The worker uses it by default (`src/worker/engines.ts`); `?engine=js` selects the TS engine, `?tables=0` disables
+tables. The built module `src/worker/dls_sim.wasm` is committed; rebuild with `npm run build:wasm` after changing the
+Rust code. Tests: `npm run test:rust` + `tests/engines.test.ts`. CI runs both. Details/benchmarks: docs/rust-engine.md.
+
 ### Web-specific additions / deviations (keep documented here)
 - `src/main.ts` = UnityMain (rAF loop). Exposes `window.dls` (Project, WorldCam, UIDrawer, IS, Main, Draw, SimHost)
   for browser tests.
@@ -25,6 +33,7 @@ click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import roun
 - Settings menu: only fullscreen on/off is applied (resolution/vsync are browser controlled). Default AppSettings
   fullscreenMode = Windowed (3). Fullscreen is applied only when the player presses APPLY (needs user gesture).
 - Sim runs in a worker (`src/worker/simWorker.ts`); Project.SyncWithSimulation replaces the sim-thread frame sync.
+  The worker's engine is the Rust/WebAssembly engine by default (see above); it runs steps in adaptive batches.
   Project.NotifyExit replaces the worker's root with an empty chip (stops sim + silences audio).
 - Worker pacing: sleeps between batches of steps (setTimeout) instead of busy-waiting; busy only when behind.
 - Input: a mouse button or key press+release within one frame delivers the release on the next frame (InputHelper).

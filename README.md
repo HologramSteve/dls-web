@@ -5,7 +5,10 @@ A browser port of [Sebastian Lague's Digital Logic Sim](https://github.com/SebLa
 no game engine.
 
 - Rendering: WebGL2 (instanced shapes + bezier-curve text, ported from the original shaders).
-- Simulation: the original simulator running in a Web Worker.
+- Simulation: in a Web Worker, by a Rust engine compiled to WebAssembly. It has the same semantics as the original
+  simulator, and is 25–120× faster than the straight TypeScript port thanks to a compiled flat program and exact
+  truth tables for combinational chips. Add `?engine=js` to the URL to use the TypeScript port of the original
+  simulator instead.
 - Storage: projects live in the browser (IndexedDB) and can be imported and exported as zip files. The zip uses the
   same folder layout and JSON as the desktop version, so projects move both ways.
 
@@ -35,6 +38,9 @@ The web version differs from the desktop one in a few places:
 ## Development
 
 ```sh
+npm run build:wasm # rebuild src/worker/dls_sim.wasm from rust/dls-sim (needs Rust + wasm32-unknown-unknown target)
+npm run test:rust  # Rust engine tests (native)
+npm run bench:rust # Rust engine benchmark (native)
 npm run check      # typecheck + lint (Biome) + unit tests — what CI runs (plus the build)
 npm test           # Vitest: simulator tests against the original's test project chips + every builtin chip
 npm run bench      # simulation benchmark
@@ -46,6 +52,7 @@ Documentation:
 
 - [`docs/porting.md`](docs/porting.md): how the port was made, and how C# and Unity concepts map to TypeScript.
 - [`docs/architecture.md`](docs/architecture.md): runtime architecture (frame loop, worker, renderer, storage).
+- [`docs/rust-engine.md`](docs/rust-engine.md): the Rust simulation engine (design, exactness, benchmarks).
 - [`docs/HANDOFF.md`](docs/HANDOFF.md): current status, web-specific deviations, known issues, conventions.
 - [`CLAUDE.md`](CLAUDE.md): rules for AI agents working on this repo.
 
