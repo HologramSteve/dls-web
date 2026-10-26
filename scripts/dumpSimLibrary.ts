@@ -1,5 +1,5 @@
 // Writes the simulation library (builtin chips + the original's MainTest project chips) as SimChipDesc JSON,
-// used by the Rust engine's native tests and benchmarks. Run: npx vite-node scripts/dumpSimLibrary.ts
+// used by the Rust engine's native tests and benchmarks. Run: bun scripts/dumpSimLibrary.ts
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Serializer } from "../src/dls/description/Serializer";

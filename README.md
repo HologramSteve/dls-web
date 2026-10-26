@@ -14,10 +14,12 @@ no game engine.
 
 ## Running
 
+Needs [Bun](https://bun.sh) (the package manager and script runner; `bun.lock` is the lockfile).
+
 ```sh
-npm install
-npm run dev        # http://localhost:5173
-npm run build      # static site in dist/ (serve with `npm run preview` or any static host)
+bun install
+bun run dev        # http://localhost:5173
+bun run build      # static site in dist/ (serve with `bun run preview` or any static host)
 ```
 
 A browser with WebGL2 and module workers is required (any current Chrome, Edge, Firefox or Safari).
@@ -38,14 +40,14 @@ The web version differs from the desktop one in a few places:
 ## Development
 
 ```sh
-npm run build:wasm # rebuild src/worker/dls_sim.wasm from rust/dls-sim (needs Rust + wasm32-unknown-unknown target)
-npm run test:rust  # Rust engine tests (native)
-npm run bench:rust # Rust engine benchmark (native)
-npm run check      # typecheck + lint (Biome) + unit tests — what CI runs (plus the build)
-npm test           # Vitest: simulator tests against the original's test project chips + every builtin chip
-npm run bench      # simulation benchmark
-npm run e2e        # browser smoke test (Playwright; needs `npm run dev` running)
-node scripts/e2e-features.cjs [screenshotDir]   # broader browser feature test
+bun run build:wasm # rebuild src/worker/dls_sim.wasm from rust/dls-sim (needs Rust + wasm32-unknown-unknown target)
+bun run test:rust  # Rust engine tests (native)
+bun run bench:rust # Rust engine benchmark (native)
+bun run check      # typecheck + lint (Biome) + unit tests — what CI runs (plus the build)
+bun run test       # Vitest: simulator tests against the original's test project chips + every builtin chip
+bun run bench      # simulation benchmark
+bun run e2e        # browser smoke test (Playwright; needs `bun run dev` running)
+bun scripts/e2e-features.cjs [screenshotDir]   # broader browser feature test
 ```
 
 Documentation:

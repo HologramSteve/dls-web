@@ -1,5 +1,5 @@
 // Browser end-to-end smoke test (not run in CI: needs Chromium + Playwright).
-// Usage: start the dev server (`npx vite --port 5173`), then `node scripts/e2e.cjs [url] [screenshotDir]`.
+// Usage: start the dev server (`bun run dev`), then `bun scripts/e2e.cjs [url] [screenshotDir]`.
 // Uses software GL (SwiftShader), where frames are slow, so waits between input events are generous.
 const fs = require("node:fs");
 const path = require("node:path");

@@ -102,4 +102,4 @@ share objects like that, so the port splits the simulator in two:
 2. For each changed file, open the TS file of the same name and apply the same change, following the conventions
    above.
 3. If the save format changed, update `src/dls/description` and the `Version.ts` constants.
-4. Run `npm run check`, then the browser tests.
+4. Run `bun run check`, then the browser tests.

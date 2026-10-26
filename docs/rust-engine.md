@@ -21,14 +21,14 @@ and `?tables=0|1` in the page URL override the setting.
 | `src/api.rs` | WebAssembly interface: a plain C ABI, so no bindings generator is needed. Wrapped by `WasmEngine` in `src/worker/engines.ts`. |
 | `src/bin/bench.rs` | Native benchmark. |
 | `tests/equivalence.rs` | Equivalence tests (see below). |
-| `testdata/maintest_lib.json` | Builtin chips and the original's MainTest chips as `SimChipDesc` (regenerate with `npx vite-node scripts/dumpSimLibrary.ts`). |
+| `testdata/maintest_lib.json` | Builtin chips and the original's MainTest chips as `SimChipDesc` (regenerate with `bun scripts/dumpSimLibrary.ts`). |
 
 Commands:
 
 ```sh
-npm run build:wasm   # builds and copies the module to src/worker/dls_sim.wasm (committed, so the web build needs no Rust)
-npm run test:rust    # native tests
-npm run bench:rust   # native benchmark
+bun run build:wasm   # builds and copies the module to src/worker/dls_sim.wasm (committed, so the web build needs no Rust)
+bun run test:rust    # native tests
+bun run bench:rust   # native benchmark
 ```
 
 Toolchain: stable Rust plus the `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`).
@@ -134,8 +134,8 @@ about 235 with the JS engine.
 - **Table build time** is 2–60 ms per circuit (native).
 
 Reproduce:
-- `npm run bench:rust` for native.
-- `npx vitest bench --run` for JS vs WASM.
+- `bun run bench:rust` for native.
+- `bun run bench` for JS vs WASM.
 
 ## Limitations / notes
 
@@ -143,4 +143,4 @@ Reproduce:
   instance, and the worker can't switch engines mid-session. Reload with `?engine=js` if that ever happens.
 - **Tables are built synchronously** when a chip is first compiled, which can pause the worker briefly on load.
 - **Changing semantics.** When the simulator semantics change (e.g. porting an upstream fix to `Simulator.ts`),
-  apply the same change in `engine.rs`. Then rebuild the module with `npm run build:wasm` and run both test suites.
+  apply the same change in `engine.rs`. Then rebuild the module with `bun run build:wasm` and run both test suites.

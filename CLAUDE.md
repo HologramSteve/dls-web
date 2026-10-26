@@ -15,11 +15,12 @@ Web port of Sebastian Lague's **Digital Logic Sim** (Unity/C#, MIT) to the brows
 
 - Web-only additions (zip import/export, worker pacing, input tweaks) are listed in `docs/HANDOFF.md`; keep that list current.
 - Rust engine (`rust/dls-sim`, docs/rust-engine.md) must keep the exact semantics of `src/dls/simulation/Simulator.ts`:
-  change both together, then `npm run build:wasm` (the .wasm is committed) and run `npm run test:rust` + `npm test`.
+  change both together, then `bun run build:wasm` (the .wasm is committed) and run `bun run test:rust` + `bun run test`.
 
 ## Commands
-- `npm install`, `npm run dev`, `npm run build`, `npm run typecheck`, `npm test`, `npm run check` (all of typecheck+lint+test)
-- Rust: `npm run build:wasm`, `npm run test:rust`, `npm run bench:rust` (needs stable Rust + `wasm32-unknown-unknown`)
+Package manager / script runner: Bun (`bun.lock`; don't add a package-lock.json).
+- `bun install`, `bun run dev`, `bun run build`, `bun run typecheck`, `bun run test`, `bun run check` (all of typecheck+lint+test)
+- Rust: `bun run build:wasm`, `bun run test:rust`, `bun run bench:rust` (needs stable Rust + `wasm32-unknown-unknown`)
 
 ## Layout
 - `src/seb/` — port of the Seb library (types, helpers, Draw/WebGL renderer, text, immediate-mode UI)

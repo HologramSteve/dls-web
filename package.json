@@ -13,8 +13,8 @@
     "test": "vitest run",
     "bench": "vitest bench --run",
     "lint": "biome lint --error-on-warnings .",
-    "check": "npm run typecheck && npm run lint && npm test",
-    "e2e": "node scripts/e2e.cjs",
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "e2e": "bun scripts/e2e.cjs",
     "build:wasm": "cargo build --manifest-path rust/dls-sim/Cargo.toml --profile wasm --target wasm32-unknown-unknown && cp rust/dls-sim/target/wasm32-unknown-unknown/wasm/dls_sim.wasm src/worker/dls_sim.wasm",
     "test:rust": "cargo test --release --manifest-path rust/dls-sim/Cargo.toml",
     "bench:rust": "cargo run --release --manifest-path rust/dls-sim/Cargo.toml --bin bench"
@@ -25,5 +25,6 @@
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
     "vitest": "^3.2.4"
-  }
+  },
+  "packageManager": "bun@1.4.4"
 }

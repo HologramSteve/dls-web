@@ -8,7 +8,7 @@ Rust simulation engine (WebAssembly, default in the worker): `docs/rust-engine.m
 
 ## Status
 ALL original C# files are ported (Seb lib, Description, SaveSystem, Simulation, Game, Graphics incl. every menu).
-`npm run check` (typecheck + lint + tests) is green; no tsconfig excludes remain. The app runs (`npm run dev`).
+`bun run check` (typecheck + lint + tests) is green; no tsconfig excludes remain. The app runs (`bun run dev`).
 
 Verified in headless Chromium (Playwright): main menu, new project, open project, bottom bar + collection popup,
 placing chips, wiring, toggling inputs, NAND truth table simulated correctly, persistence across reloads (IndexedDB),
@@ -22,8 +22,8 @@ click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import roun
 flat program + exact truth tables for combinational chips; ~25-120x faster than the JS engine in the browser.
 The worker uses it by default (`src/worker/engines.ts`). Users pick the engine in main menu SETTINGS, in a section
 marked "WEB VERSION ONLY (not in the original)" (AppSettings.Web_SimEngine / Web_TruthTables; applying restarts the
-worker). URL parameters `?engine=js|rust` and `?tables=0|1` override the setting (used by tests). The built module `src/worker/dls_sim.wasm` is committed; rebuild with `npm run build:wasm` after changing the
-Rust code. Tests: `npm run test:rust` + `tests/engines.test.ts`. CI runs both. Details/benchmarks: docs/rust-engine.md.
+worker). URL parameters `?engine=js|rust` and `?tables=0|1` override the setting (used by tests). The built module `src/worker/dls_sim.wasm` is committed; rebuild with `bun run build:wasm` after changing the
+Rust code. Tests: `bun run test:rust` + `tests/engines.test.ts`. CI runs both. Details/benchmarks: docs/rust-engine.md.
 
 ### Web-specific additions / deviations (keep documented here)
 - `src/main.ts` = UnityMain (rAF loop). Exposes `window.dls` (Project, WorldCam, UIDrawer, IS, Main, Draw, SimHost)
@@ -52,7 +52,7 @@ Rust code. Tests: `npm run test:rust` + `tests/engines.test.ts`. CI runs both. D
    chip -> backup in "Deleted Chips" like the original), project duplicate/rename/delete/open, preferences menu.
    Still untested interactively: preference changes being applied (grid/pause toggles), dot display visuals, buzzer
    sound output on real speakers, the file picker / download UI of import/export (logic is tested).
-3. Browser tests: `npm run e2e` (smoke) and `node scripts/e2e-features.cjs [shotDir]` (features), both need the dev
+3. Browser tests: `bun run e2e` (smoke) and `bun scripts/e2e-features.cjs [shotDir]` (features), both need the dev
    server on :5173. Helpers in `scripts/e2eHelpers.cjs`. Launch flags for software GL are set there; waits >= 300ms
    between input events because headless frames are slow. Context menus open upward near the bottom of the screen.
    Unit tests: `tests/chips.test.ts` (MainTest chips incl. RAM/PC/registers), `tests/builtins.test.ts` (every builtin).
@@ -80,5 +80,5 @@ Rust code. Tests: `npm run test:rust` + `tests/engines.test.ts`. CI runs both. D
 - PinState values are int32 (see PinState.ts).
 
 ## Tooling
-- `npm run check` = typecheck + lint (Biome, warnings are errors) + tests. CI also runs `vite build`.
+- `bun run check` = typecheck + lint (Biome, warnings are errors) + tests. CI also runs `vite build`.
 - Commit + push after every file group (user's usage is limited). Update this file when status changes.

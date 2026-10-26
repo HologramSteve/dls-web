@@ -1,5 +1,5 @@
 // Browser feature tests (beyond the smoke test in e2e.cjs). Needs the dev server on :5173.
-// Usage: node scripts/e2e-features.cjs [screenshotDir]
+// Usage: bun scripts/e2e-features.cjs [screenshotDir]
 const { launch } = require("./e2eHelpers.cjs");
 
 let hRef = null;
