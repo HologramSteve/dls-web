@@ -5,6 +5,7 @@ import { PreferencesMenu } from "../graphics/ui/menus/PreferencesMenu";
 import { MenuType, UIDrawer } from "../graphics/ui/UIDrawer";
 import { WorldDrawer } from "../graphics/WorldDrawer";
 import { Loader, Saver } from "../saveSystem/Saver";
+import { SimHost } from "../simulation/SimHost";
 import type { AudioState } from "./audio/AudioState";
 import { CreateDefaultChipCollections, GetDefaultStarredList } from "./BuiltinChipCreator";
 import { CameraController } from "./CameraController";
@@ -33,6 +34,7 @@ export const Main = {
 		// (web: fullscreen can only be entered from a user gesture, so settings are applied from the settings menu only)
 		Main.ActiveAppSettings = Loader.LoadAppSettings();
 		Saver.SaveAppSettings(Main.ActiveAppSettings);
+		ApplySimEngineSetting(Main.ActiveAppSettings);
 		Main.audioState = audioState;
 	},
 
@@ -56,6 +58,7 @@ export const Main = {
 		Saver.SaveAppSettings(newSettings);
 		// Apply settings to app (web: only fullscreen vs windowed; resolution and vsync are controlled by the browser)
 		ApplyFullscreen(newSettings.fullscreenMode !== FullScreenMode.Windowed);
+		ApplySimEngineSetting(newSettings);
 	},
 
 	LoadMainMenu() {
@@ -119,4 +122,9 @@ function ApplyFullscreen(fullscreen: boolean) {
 	} catch {
 		/* not allowed without user gesture */
 	}
+}
+
+// Web-only: simulation engine choice (Rust/WebAssembly or the TS port of the original simulator)
+function ApplySimEngineSetting(settings: AppSettings) {
+	SimHost.ConfigureEngine(settings.Web_SimEngine === 1 ? "js" : "rust", settings.Web_TruthTables);
 }

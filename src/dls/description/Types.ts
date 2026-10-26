@@ -293,8 +293,13 @@ export interface AppSettings {
 	ResolutionY: number;
 	fullscreenMode: number;
 	VSyncEnabled: boolean;
+	// ---- Web version only (not in the original; see docs/rust-engine.md) ----
+	// Simulation engine: 0 = Rust (WebAssembly), 1 = JS (TS port of the original simulator)
+	Web_SimEngine: number;
+	// Truth tables for combinational chips (Rust engine only)
+	Web_TruthTables: boolean;
 }
 
 export function DefaultAppSettings(): AppSettings {
-	return { ResolutionX: 1920, ResolutionY: 1080, fullscreenMode: 3, VSyncEnabled: true }; // (web: windowed by default)
+	return { ResolutionX: 1920, ResolutionY: 1080, fullscreenMode: 3, VSyncEnabled: true, Web_SimEngine: 0, Web_TruthTables: true }; // (web: windowed by default)
 }

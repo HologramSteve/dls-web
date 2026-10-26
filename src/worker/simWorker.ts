@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // Simulation Web Worker. Equivalent of Project.SimThread in the original: owns the simulation, applies queued
 // modifications, steps the simulation at the target rate, and answers frame requests with state snapshots.
-import type { FrameRequest, Snapshot, WorkerInit } from "../dls/simulation/SimProtocol";
+import type { EngineReady, FrameRequest, Snapshot, WorkerInit } from "../dls/simulation/SimProtocol";
 import { JsEngine, type SimEngine, WasmEngine } from "./engines";
 import wasmUrl from "./dls_sim.wasm?url";
 
@@ -64,6 +64,7 @@ function buildSnapshot(e: SimEngine, req: FrameRequest): Snapshot {
 		pausedSingleStepCounter,
 		audio: e.audio(),
 		error: lastError,
+		engine: e.name,
 	};
 	lastError = null;
 	return snap;
@@ -107,6 +108,8 @@ async function init(msg: WorkerInit) {
 		}
 	}
 	if (!engine) engine = new JsEngine();
+	const ready: EngineReady = { type: "engine", engine: engine.name };
+	(self as unknown as Worker).postMessage(ready);
 	console.info(`Simulation engine: ${engine.name}` + (engine.name === "rust" ? ` (truth tables ${msg.tables ? "on" : "off"})` : ""));
 	for (const req of pending.splice(0)) handleFrame(engine, req);
 	loop();

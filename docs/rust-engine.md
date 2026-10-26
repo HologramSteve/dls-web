@@ -4,8 +4,10 @@ A second implementation of the simulator in Rust, compiled to WebAssembly and us
 default. It has the **same semantics** as the TypeScript port of the original simulator
 (`src/dls/simulation/Simulator.ts`) and is roughly 25–120× faster in the browser.
 
-The TypeScript simulator stays in the code base as the faithful reference port and as a fallback. Select it with
-`?engine=js` in the page URL. `?tables=0` keeps the Rust engine but disables truth tables.
+The TypeScript simulator stays in the code base as the faithful reference port and as a fallback. Choose the engine
+in the main menu SETTINGS screen, in a section marked "WEB VERSION ONLY (not in the original)": Sim engine
+RUST (FAST) / JS (ORIGINAL), and Truth tables ON / OFF. Applying restarts the simulation worker. `?engine=js|rust`
+and `?tables=0|1` in the page URL override the setting.
 
 ## Layout
 

@@ -17,6 +17,7 @@ import { DLSVersion, LastUpdatedString, Version } from "../../../game/Version";
 import { DownloadProject, PickAndImportProjects } from "../../../saveSystem/ProjectTransfer";
 import { Loader, Saver } from "../../../saveSystem/Saver";
 import { SaveUtils } from "../../../saveSystem/SavePaths";
+import { SimHost } from "../../../simulation/SimHost";
 import { ActiveUITheme, DefaultButtonSpacing, HorizontalButtonSpacing, VerticalButtonSpacing } from "../../DrawSettings";
 
 enum MenuScreen {
@@ -49,6 +50,11 @@ const ID_ProjectsScrollView = UIHandle("MainMenu_ProjectsScrollView");
 const SettingsWheelFullScreenOptions = ["OFF", "MAXIMIZED", "BORDERLESS", "EXCLUSIVE"];
 const FullScreenModes = [FullScreenMode.Windowed, FullScreenMode.MaximizedWindow, FullScreenMode.FullScreenWindow, FullScreenMode.ExclusiveFullScreen];
 const SettingsWheelVSyncOptions = ["DISABLED", "ENABLED"];
+// Web-only settings (not in the original)
+const SettingsWheelSimEngineOptions = ["RUST (FAST)", "JS (ORIGINAL)"];
+const SettingsWheelTruthTableOptions = ["OFF", "ON"];
+const WebOnlyHeaderCol = new Color(0.98, 0.72, 0.26);
+const WebOnlyNoteCol = new Color(0.6, 0.6, 0.65);
 
 const FormatButtonString = (s: string) => (capitalize ? s.toUpperCase() : s);
 
@@ -290,7 +296,7 @@ function DrawSettingsScreen() {
 	const labelOriginLeft = UI.Centre.x - regionWidth / 2;
 	const elementOriginRight = UI.Centre.x + regionWidth / 2;
 	const wheelSize = new Vector2(16, 2.5);
-	let pos = new Vector2(labelOriginLeft, UI.Centre.y + 4);
+	let pos = new Vector2(labelOriginLeft, UI.Centre.y + 11); // (web: starts higher to fit the web-only settings)
 
 	const scope = UI.BeginBoundsScope(true);
 	try {
@@ -316,6 +322,24 @@ function DrawSettingsScreen() {
 		UI.DrawText("VSync", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, Color.white);
 		const vsyncSetting = UI.WheelSelectorIndexed(EditedAppSettings.VSyncEnabled ? 1 : 0, SettingsWheelVSyncOptions, new Vector2(elementOriginRight, pos.y), wheelSize, theme.OptionsWheel, Anchor.CentreRight);
 		EditedAppSettings.VSyncEnabled = vsyncSetting === 1;
+
+		// ---- Web version only (not part of the original Digital Logic Sim) ----
+		pos = pos.add(Vector2.down.mul(5));
+		UI.DrawText("WEB VERSION ONLY (not in the original):", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, WebOnlyHeaderCol);
+		pos = pos.add(Vector2.down.mul(3.5));
+		UI.DrawText("Sim engine", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, Color.white);
+		const engineIndex = UI.WheelSelectorIndexed(EditedAppSettings.Web_SimEngine === 1 ? 1 : 0, SettingsWheelSimEngineOptions, new Vector2(elementOriginRight, pos.y), wheelSize, theme.OptionsWheel, Anchor.CentreRight);
+		EditedAppSettings.Web_SimEngine = engineIndex;
+		pos = pos.add(Vector2.down.mul(4));
+		const tablesEnabled = engineIndex === 0;
+		UI.DrawText("Truth tables", theme.FontRegular, theme.FontSizeRegular, pos, Anchor.CentreLeft, tablesEnabled ? Color.white : WebOnlyNoteCol);
+		const tablesIndex = UI.WheelSelectorIndexed(EditedAppSettings.Web_TruthTables ? 1 : 0, SettingsWheelTruthTableOptions, new Vector2(elementOriginRight, pos.y), wheelSize, theme.OptionsWheel, Anchor.CentreRight, true, tablesEnabled);
+		EditedAppSettings.Web_TruthTables = tablesIndex === 1;
+		pos = pos.add(Vector2.down.mul(3));
+		const running = SimHost.activeEngineName === "rust" ? "RUST" : SimHost.activeEngineName === "js" ? "JS" : "...";
+		UI.DrawText(`Running: ${running}. Both give the same results; JS is`, theme.FontRegular, theme.FontSizeRegular * 0.8, pos, Anchor.CentreLeft, WebOnlyNoteCol);
+		pos = pos.add(Vector2.down.mul(2));
+		UI.DrawText("the original simulator ported as-is (slower).", theme.FontRegular, theme.FontSizeRegular * 0.8, pos, Anchor.CentreLeft, WebOnlyNoteCol);
 
 		// Background panel
 		UI.ModifyPanel(backgroundPanelID, UI.GetCurrentBoundsScope().Centre, UI.GetCurrentBoundsScope().Size.add(Vector2.one.mul(3)), MakeCol255(37, 37, 43));

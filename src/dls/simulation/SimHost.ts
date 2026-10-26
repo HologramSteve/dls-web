@@ -6,7 +6,7 @@
 import type { ChipDescription, PinAddress } from "../description/Types";
 import type { SimChipDesc } from "./SimChip";
 import type { SimModifyCommand } from "./Simulator";
-import type { DisplayData, FrameRequest, Snapshot, WorkerInit } from "./SimProtocol";
+import type { DisplayData, EngineReady, FrameRequest, Snapshot, WorkerInit } from "./SimProtocol";
 import { PinState } from "./PinState";
 
 export function ToSimDesc(desc: ChipDescription): SimChipDesc {
@@ -100,13 +100,43 @@ class SimHostImpl {
 	Start() {
 		if (this.worker) return;
 		this.worker = new Worker(new URL("../../worker/simWorker.ts", import.meta.url), { type: "module" });
-		this.worker.onmessage = (e: MessageEvent<Snapshot>) => this.OnSnapshot(e.data);
+		this.worker.onmessage = (e: MessageEvent<Snapshot | EngineReady>) => {
+			if (e.data.type === "engine") this.activeEngineName = e.data.engine;
+			else this.OnSnapshot(e.data);
+		};
 		this.worker.onerror = (e) => console.error("Simulation worker error", e);
-		// Engine selection (web-only): Rust/WebAssembly engine by default; `?engine=js` uses the TS port of the
-		// original simulator, `?tables=0` disables truth tables in the Rust engine.
+		// The worker waits for ConfigureEngine (sent once the app settings are loaded) before simulating
+		if (this.engineConfig) this.worker.postMessage(this.engineConfig);
+	}
+
+	// ---- Engine selection (web-only, see docs/rust-engine.md) ----
+	private engineConfig: WorkerInit | null = null;
+	// Engine reported by the worker ("rust" | "js"), empty until the first snapshot
+	activeEngineName = "";
+
+	// Select the simulation engine (app settings; `?engine=js|rust` and `?tables=0|1` in the URL override them).
+	// Changing the engine restarts the worker: only done from the main menu, where no chip is being simulated.
+	ConfigureEngine(engine: "rust" | "js", tables: boolean) {
 		const params = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
-		const init: WorkerInit = { type: "init", engine: params.get("engine") === "js" ? "js" : "rust", tables: params.get("tables") !== "0" };
-		this.worker.postMessage(init);
+		const urlEngine = params.get("engine");
+		if (urlEngine === "js" || urlEngine === "rust") engine = urlEngine;
+		if (params.get("tables") === "0" || params.get("tables") === "1") tables = params.get("tables") === "1";
+
+		const config: WorkerInit = { type: "init", engine, tables };
+		const prev = this.engineConfig;
+		this.engineConfig = config;
+		if (!this.worker) return;
+		if (!prev) {
+			this.worker.postMessage(config);
+		} else if (prev.engine !== engine || prev.tables !== tables) {
+			this.worker.terminate();
+			this.worker = null;
+			this.outstanding = 0;
+			this.cmds = [];
+			this.activeEngineName = "";
+			this.ResetViewState();
+			this.Start();
+		}
 	}
 
 	private OnSnapshot(snap: Snapshot) {
@@ -116,6 +146,7 @@ class SimHostImpl {
 		if (snap.error) console.debug("Sim:", snap.error);
 
 		this.simAvgTicksPerSec = snap.ticksPerSecond;
+		this.activeEngineName = snap.engine;
 		this.simPausedSingleStepCounter = snap.pausedSingleStepCounter;
 		this.simulationFrame = snap.simulationFrame;
 		if (snap.audio) {

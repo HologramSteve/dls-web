@@ -20,8 +20,9 @@ click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import roun
 ### Rust simulation engine (added after the port)
 `rust/dls-sim`: same semantics as `Simulator.ts` (verified bit-for-bit against a reference port of StepChip), compiled
 flat program + exact truth tables for combinational chips; ~25-120x faster than the JS engine in the browser.
-The worker uses it by default (`src/worker/engines.ts`); `?engine=js` selects the TS engine, `?tables=0` disables
-tables. The built module `src/worker/dls_sim.wasm` is committed; rebuild with `npm run build:wasm` after changing the
+The worker uses it by default (`src/worker/engines.ts`). Users pick the engine in main menu SETTINGS, in a section
+marked "WEB VERSION ONLY (not in the original)" (AppSettings.Web_SimEngine / Web_TruthTables; applying restarts the
+worker). URL parameters `?engine=js|rust` and `?tables=0|1` override the setting (used by tests). The built module `src/worker/dls_sim.wasm` is committed; rebuild with `npm run build:wasm` after changing the
 Rust code. Tests: `npm run test:rust` + `tests/engines.test.ts`. CI runs both. Details/benchmarks: docs/rust-engine.md.
 
 ### Web-specific additions / deviations (keep documented here)

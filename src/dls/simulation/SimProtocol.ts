@@ -42,6 +42,14 @@ export interface Snapshot {
 	pausedSingleStepCounter: number;
 	audio: Float64Array | null;
 	error: string | null;
+	// Engine actually running in the worker (web-only; "rust" can fall back to "js" if WebAssembly fails to load)
+	engine: string;
+}
+
+// Sent by the worker once its engine is ready
+export interface EngineReady {
+	type: "engine";
+	engine: "rust" | "js";
 }
 
 // First message to the worker: which simulation engine to use (see worker/engines.ts)

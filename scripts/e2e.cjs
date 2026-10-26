@@ -43,6 +43,24 @@ const check = (cond, msg) => {
 			return [v.x / devicePixelRatio, innerHeight - v.y / devicePixelRatio];
 		}, p);
 
+	// ---- Settings: switch the simulation engine (web-only setting) and back ----
+	if (!url.includes("engine=")) {
+		const engine = () => page.evaluate(() => window.dls.SimHost.activeEngineName);
+		await click(640, 378); // SETTINGS
+		await shot("00_settings");
+		check((await engine()) === "rust", "settings: Rust engine running by default");
+		await click(817, 430); // Sim engine >
+		await click(796, 603); // APPLY
+		await wait(1500);
+		check((await engine()) === "js", "settings: switched to JS engine");
+		await click(817, 430); // Sim engine >
+		await click(796, 603); // APPLY
+		await wait(1500);
+		check((await engine()) === "rust", "settings: switched back to Rust engine");
+		check((await page.evaluate(() => window.dls.Main.ActiveAppSettings.Web_SimEngine)) === 0, "settings: engine choice saved");
+		await click(549, 603); // EXIT
+	}
+
 	// ---- New project via main menu UI ----
 	await shot("01_menu");
 	await click(640, 283); // NEW PROJECT

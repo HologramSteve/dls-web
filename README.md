@@ -7,8 +7,8 @@ no game engine.
 - Rendering: WebGL2 (instanced shapes + bezier-curve text, ported from the original shaders).
 - Simulation: in a Web Worker, by a Rust engine compiled to WebAssembly. It has the same semantics as the original
   simulator, and is 25–120× faster than the straight TypeScript port thanks to a compiled flat program and exact
-  truth tables for combinational chips. Add `?engine=js` to the URL to use the TypeScript port of the original
-  simulator instead.
+  truth tables for combinational chips. You can switch to the TypeScript port of the original simulator in
+  SETTINGS, under "web version only".
 - Storage: projects live in the browser (IndexedDB) and can be imported and exported as zip files. The zip uses the
   same folder layout and JSON as the desktop version, so projects move both ways.
 
