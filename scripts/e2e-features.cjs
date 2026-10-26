@@ -250,10 +250,61 @@ const { launch } = require("./e2eHelpers.cjs");
 		return { exists: window.dls.Project.ActiveProject.chipLibrary.HasChip("DISP"), viewed: window.dls.Project.ActiveProject.ViewedChip.ChipName, files: fs.GetFilesRecursive("Projects/DisplayTest") };
 	});
 	console.log(" after delete:", JSON.stringify(after));
-	check(!after.exists && !after.files.some((f) => f.includes("DISP.json")), "chip removed from chip library and storage");
+	check(!after.exists && !after.files.includes("Projects/DisplayTest/Chips/DISP.json") && after.files.includes("Projects/DisplayTest/Deleted Chips/DISP.json"), "chip removed from library; backup kept in Deleted Chips (as original)");
 	await h.shot("f22_deleted");
 	await h.click(1076, 280); // EXIT LIBRARY (panel shrinks back)
 	await wait(500);
 	await h.shot("f23_exit_library");
+
+	// ---- Project management (main menu) ----
+	await ev(() => window.dls.Main.LoadMainMenu());
+	await wait(800);
+	await h.shot("f24_main_menu");
+	await h.click(640, 330); // OPEN PROJECT
+	await wait(600);
+	await h.shot("f25_open_project");
+	const projects = () => ev(async () => (await import("/src/dls/saveSystem/FileSystem.ts")).FileSystem.EnumerateDirectories("Projects").map((p) => p.split("/").pop()).sort());
+	console.log(" projects:", JSON.stringify(await projects()));
+	await h.click(633, 233); // Features
+	await h.click(566, 608); // DUPLICATE
+	await wait(500);
+	await h.shot("f26_duplicate");
+	await h.combo("Control", "a");
+	await h.key("Backspace");
+	await h.type("Dup");
+	await h.key("Enter");
+	await wait(800);
+	let ps = await projects();
+	console.log(" projects:", JSON.stringify(ps));
+	check(ps.includes("Dup") && ps.includes("Features"), "project duplicated");
+	await h.shot("f27_after_duplicate");
+	// Dup is selected (top of list): rename it
+	await h.click(712, 608); // RENAME
+	await wait(500);
+	await h.combo("Control", "a");
+	await h.key("Backspace");
+	await h.type("Renamed");
+	await h.key("Enter");
+	await wait(800);
+	ps = await projects();
+	console.log(" projects:", JSON.stringify(ps));
+	check(ps.includes("Renamed") && !ps.includes("Dup"), "project renamed");
+	const renamedName = await ev(async () => JSON.parse((await import("/src/dls/saveSystem/FileSystem.ts")).FileSystem.ReadAllText("Projects/Renamed/ProjectDescription.json")).ProjectName);
+	check(renamedName === "Renamed", "renamed project description updated");
+	await h.shot("f28_after_rename");
+	await h.click(633, 198); // select Renamed (top)
+	await h.click(420, 608); // DELETE
+	await wait(500);
+	await h.shot("f29_delete_project");
+	await h.click(770, 399); // confirm DELETE
+	await wait(800);
+	ps = await projects();
+	console.log(" projects:", JSON.stringify(ps));
+	check(!ps.includes("Renamed") && ps.includes("Features"), "project deleted");
+	// Open a remaining project from the list
+	await h.click(633, 233); // Features (now second row after re-sort by last-opened)
+	await h.click(1005, 608); // OPEN
+	await wait(1500);
+	check((await ev(() => window.dls.Project.ActiveProject?.description.ProjectName)) != null, "project opened from list");
 	await h.finish();
 })();
