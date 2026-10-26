@@ -2,8 +2,19 @@
 // Usage: node scripts/e2e-features.cjs [screenshotDir]
 const { launch } = require("./e2eHelpers.cjs");
 
+let hRef = null;
+process.on("unhandledRejection", async (err) => {
+	console.log("CRASH:", err?.message ?? err);
+	if (hRef) {
+		console.log("page errors:\n  " + hRef.errors.join("\n  "));
+		await hRef.shot("crash");
+	}
+	process.exit(1);
+});
+
 (async () => {
 	const h = await launch();
+	hRef = h;
 	h.shotDir = process.argv[2] || null;
 	const { ev, wait, check } = h;
 	await h.newProject("Features");
@@ -132,6 +143,10 @@ const { launch } = require("./e2eHelpers.cjs");
 		await h.click(a[0], a[1]);
 		await h.move(b[0], b[1]);
 		await h.click(b[0], b[1]);
+		if (!(await ev(() => !!window.dls.Project.ActiveProject))) {
+			console.log(` project closed while wiring #${i}: ${JSON.stringify([a, b])}`);
+			await h.shot("f09_wiring_lost");
+		}
 	}
 	check((await ev(() => window.dls.Project.ActiveProject.ViewedChip.Wires.length)) === 7, "display wired");
 	const setInputs = (vals) =>
