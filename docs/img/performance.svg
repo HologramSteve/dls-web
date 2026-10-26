@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="438" viewBox="0 0 860 438" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect x="0.5" y="0.5" width="859" height="437" rx="10" fill="#ffffff" stroke="#e3e2de"/>
+<text x="24" y="38" font-size="20" font-weight="600" fill="#1f1e1d">Speed-up over the JS engine</text>
+<text x="24" y="62" font-size="13" fill="#6b6a66">Simulation steps per second relative to the TypeScript port of the original simulator (= 1×). Higher is better.</text>
+<rect x="500" y="74" width="12" height="12" rx="3" fill="#d95926"/><text x="518" y="84" font-size="13" fill="#1f1e1d">Rust (WebAssembly)</text>
+<rect x="650" y="74" width="12" height="12" rx="3" fill="#199e70"/><text x="668" y="84" font-size="13" fill="#1f1e1d">+ truth tables</text>
+<line x1="190" y1="92" x2="190" y2="382" stroke="#ecebe8"/>
+<text x="190" y="402" font-size="12" fill="#6b6a66" text-anchor="middle">0×</text>
+<line x1="323.3333333333333" y1="92" x2="323.3333333333333" y2="382" stroke="#ecebe8"/>
+<text x="323.3333333333333" y="402" font-size="12" fill="#6b6a66" text-anchor="middle">20×</text>
+<line x1="456.66666666666663" y1="92" x2="456.66666666666663" y2="382" stroke="#ecebe8"/>
+<text x="456.66666666666663" y="402" font-size="12" fill="#6b6a66" text-anchor="middle">40×</text>
+<line x1="590" y1="92" x2="590" y2="382" stroke="#ecebe8"/>
+<text x="590" y="402" font-size="12" fill="#6b6a66" text-anchor="middle">60×</text>
+<line x1="723.3333333333333" y1="92" x2="723.3333333333333" y2="382" stroke="#ecebe8"/>
+<text x="723.3333333333333" y="402" font-size="12" fill="#6b6a66" text-anchor="middle">80×</text>
+<text x="176" y="116" font-size="14" font-weight="600" fill="#1f1e1d" text-anchor="end">ALU-8</text>
+<text x="176" y="134" font-size="12" fill="#6b6a66" text-anchor="end">317 NAND gates</text>
+<rect x="190" y="100" width="134.43327365376672" height="17" rx="4" fill="#d95926"/>
+<text x="331.4332736537667" y="113" font-size="13" fill="#1f1e1d">20×</text>
+<rect x="190" y="121" width="220.16985722811364" height="17" rx="4" fill="#199e70"/>
+<text x="417.16985722811364" y="134" font-size="13" fill="#1f1e1d">33×</text>
+<text x="176" y="174" font-size="14" font-weight="600" fill="#1f1e1d" text-anchor="end">demo</text>
+<text x="176" y="192" font-size="12" fill="#6b6a66" text-anchor="end">1,084 NAND gates</text>
+<rect x="190" y="158" width="268.29208880031007" height="17" rx="4" fill="#d95926"/>
+<text x="465.29208880031007" y="171" font-size="13" fill="#1f1e1d">40×</text>
+<rect x="190" y="179" width="576.3106903615125" height="17" rx="4" fill="#199e70"/>
+<text x="773.3106903615125" y="192" font-size="13" fill="#1f1e1d">86×</text>
+<text x="176" y="232" font-size="14" font-weight="600" fill="#1f1e1d" text-anchor="end">PC</text>
+<text x="176" y="250" font-size="12" fill="#6b6a66" text-anchor="end">1,216 NAND gates</text>
+<rect x="190" y="216" width="252.3457251385516" height="17" rx="4" fill="#d95926"/>
+<text x="449.3457251385516" y="229" font-size="13" fill="#1f1e1d">38×</text>
+<rect x="190" y="237" width="436.506631795255" height="17" rx="4" fill="#199e70"/>
+<text x="633.506631795255" y="250" font-size="13" fill="#1f1e1d">65×</text>
+<text x="176" y="290" font-size="14" font-weight="600" fill="#1f1e1d" text-anchor="end">WIP2</text>
+<text x="176" y="308" font-size="12" fill="#6b6a66" text-anchor="end">5,709 NAND gates</text>
+<rect x="190" y="274" width="326.62884160756505" height="17" rx="4" fill="#d95926"/>
+<text x="523.628841607565" y="287" font-size="13" fill="#1f1e1d">49×</text>
+<rect x="190" y="295" width="511.4799054373523" height="17" rx="4" fill="#199e70"/>
+<text x="708.4799054373523" y="308" font-size="13" fill="#1f1e1d">77×</text>
+<text x="176" y="348" font-size="14" font-weight="600" fill="#1f1e1d" text-anchor="end">RAM-sync</text>
+<text x="176" y="366" font-size="12" fill="#6b6a66" text-anchor="end">23,989 NAND gates</text>
+<rect x="190" y="332" width="143.33333333333337" height="17" rx="4" fill="#d95926"/>
+<text x="340.33333333333337" y="345" font-size="13" fill="#1f1e1d">22×</text>
+<rect x="190" y="353" width="142.479674796748" height="17" rx="4" fill="#199e70"/>
+<text x="339.479674796748" y="366" font-size="13" fill="#1f1e1d">21×</text>
+<text x="24" y="422" font-size="12" fill="#6b6a66">Same .wasm the browser runs, Node 22, one core · 2026-10-26 · circuits from the original's test project · data: docs/benchmarks.json</text>
+</svg>

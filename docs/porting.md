@@ -79,15 +79,46 @@ share objects like that, so the port splits the simulator in two:
   pause/step/speed settings.
 - The worker replies with a `Snapshot`: pin states of the viewed chip, display data (RGB/dot/7-segment/LED internal
   state), measured ticks per second and audio amplitudes.
-- The worker paces itself to the target steps per second. It runs batches of steps and sleeps with `setTimeout`
-  between them; it only runs flat out when it is behind. It reaches the default 1000 steps/s target.
+- The worker paces itself to the target steps per second. It runs adaptive batches of steps and sleeps with
+  `setTimeout` between them; it only runs flat out when it is behind.
+- Behind the same protocol, the worker runs one of two engines (`src/worker/engines.ts`): the TS port described
+  here, or the faster Rust engine (see below).
+
+## Phase 2: the Rust simulation engine
+
+After the port was complete and verified, the simulator was reimplemented in Rust (`rust/dls-sim`) for speed. It is
+compiled to WebAssembly and is now the default engine. The same rule applied: behaviour must not change. It was built
+in verified layers:
+
+1. **Reference port.** A direct, arena-based Rust port of `Simulator.ts`: chips and pins in flat arrays instead of
+   objects, the recursive `StepChip` / `StepChipReorder`, `ReceiveInput` with tri-state conflict resolution, every
+   builtin chip, and the same modification commands and JSON. This is the semantic reference.
+2. **Compiled fast path.** The recursive walk is unrolled into a flat op list that performs the same operations in
+   the same order. A test checks it **bit for bit** against the reference on every chip of the original's test
+   project: every pin, every step, including edits in the middle of a run.
+3. **Optimisations, each re-verified.** Three were added, and the same bit-for-bit test runs after each one:
+   - "inputs ready" counters are reconstructed instead of tracked on every frame;
+   - wire copies that provably don't affect any read are removed;
+   - when the occasional random reorder of chips happens, the program is patched instead of rebuilt.
+4. **Truth tables.** Chips with no memory and no feedback get exact lookup tables. They are checked against the
+   reference on combinational chips, and on registers, the program counter and RAM with tables enabled.
+5. **Integration.**
+   - A plain C ABI for WebAssembly, so no bindings generator is needed.
+   - A `SimEngine` interface in the worker.
+   - Engine choice in Settings, in a section marked as web-only.
+   - Cross-engine tests in Vitest that load the real `.wasm` file.
+
+How it works and why it's exact: [rust-engine.md](rust-engine.md). Measurements: [performance.md](performance.md).
 
 ## Verification
 
-- **Unit tests** (`tests/`, Vitest, run in CI) run the simulator in Node on the chips of the original's own test
-  project (`testdata/Projects/MainTest`): gates, adders, latches, flip-flops, registers, RAM, the program
+- **Unit tests** (`tests/`, Vitest, 55 tests, run in CI) run the simulator in Node on the chips of the original's
+  own test project (`testdata/Projects/MainTest`): gates, adders, latches, flip-flops, registers, RAM, the program
   counter and BCD conversion. A further set covers every builtin chip type (ROM, split/merge, 3-state bus conflicts,
-  pulse, clock, key, bus, dev RAM, buzzer).
+  pulse, clock, key, bus, dev RAM, buzzer). `tests/engines.test.ts` runs behavioural tests on both engines and
+  compares them step by step.
+- **Rust tests** (`rust/dls-sim/tests`, `bun run test:rust`, run in CI): fast path vs reference bit for bit, truth
+  tables, program patching.
 - **Browser tests** (`scripts/e2e.cjs`, `scripts/e2e-features.cjs`, Playwright) drive the real UI with mouse and
   keyboard events. They cover the main menu, placing and wiring chips, NAND simulation, and importing the original
   test project. They also cover the ROM editor, every context-menu action, an RGB display, the save and customize
@@ -102,4 +133,6 @@ share objects like that, so the port splits the simulator in two:
 2. For each changed file, open the TS file of the same name and apply the same change, following the conventions
    above.
 3. If the save format changed, update `src/dls/description` and the `Version.ts` constants.
-4. Run `bun run check`, then the browser tests.
+4. If the change touches the simulator (`src/dls/simulation`), make the same change in `rust/dls-sim/src/engine.rs`.
+   Then run `bun run build:wasm` and `bun run test:rust`.
+5. Run `bun run check`, then the browser tests.

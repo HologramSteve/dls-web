@@ -1,0 +1,106 @@
+{
+ "about": "Simulation steps per second on circuits from the original Digital Logic Sim test project (testdata/Projects/MainTest). Inputs change every 100 steps and the clock toggles. One core of a 2.1 GHz Xeon. Regenerate the chart with: bun scripts/perfChart.ts",
+ "wasm": {
+  "measured_with": "bun run bench (Vitest bench in Node 22; the same dls_sim.wasm the browser loads)",
+  "date": "2026-10-26",
+  "rows": [
+   {
+    "circuit": "ALU-8",
+    "nand_gates": 317,
+    "builtin_chips": 396,
+    "wires": 1609,
+    "js": 21783,
+    "rust": 439254,
+    "tables": 719394
+   },
+   {
+    "circuit": "demo",
+    "nand_gates": 1084,
+    "builtin_chips": 1125,
+    "wires": 4381,
+    "js": 6021,
+    "rust": 242308,
+    "tables": 520495
+   },
+   {
+    "circuit": "PC",
+    "nand_gates": 1216,
+    "builtin_chips": 1256,
+    "wires": 4945,
+    "js": 5353,
+    "rust": 202621,
+    "tables": 350493
+   },
+   {
+    "circuit": "WIP2",
+    "nand_gates": 5709,
+    "builtin_chips": 5979,
+    "wires": 23381,
+    "js": 705,
+    "rust": 34541,
+    "tables": 54089
+   },
+   {
+    "circuit": "RAM-sync",
+    "nand_gates": 23989,
+    "builtin_chips": 26605,
+    "wires": 95640,
+    "js": 164,
+    "rust": 3526,
+    "tables": 3505
+   }
+  ]
+ },
+ "native": {
+  "measured_with": "bun run bench:rust (Rust 1.97, release build)",
+  "date": "2026-10-26",
+  "rows": [
+   {
+    "circuit": "ALU-8",
+    "reference": 44711,
+    "fast": 619879,
+    "tables": 1029250,
+    "table_build_ms": 21
+   },
+   {
+    "circuit": "PC",
+    "reference": 14584,
+    "fast": 310635,
+    "tables": 640531,
+    "table_build_ms": 14
+   },
+   {
+    "circuit": "demo",
+    "reference": 13751,
+    "fast": 331520,
+    "tables": 520297,
+    "table_build_ms": 2
+   },
+   {
+    "circuit": "WIP2",
+    "reference": 1379,
+    "fast": 48916,
+    "tables": 65047,
+    "table_build_ms": 30
+   },
+   {
+    "circuit": "RAM-sync",
+    "reference": 335,
+    "fast": 3582,
+    "tables": 3593,
+    "table_build_ms": 42
+   }
+  ]
+ },
+ "browser": {
+  "measured_with": "bun run e2e (headless Chromium, RAM-sync, unlimited target rate)",
+  "date": "2026-10-26",
+  "rows": [
+   {
+    "circuit": "RAM-sync",
+    "js": 235,
+    "rust": 3880
+   }
+  ]
+ }
+}

@@ -1,84 +1,144 @@
 # Handoff / status (read first)
 
-Faithful port of SebLague/Digital-Logic-Sim (Unity C#, v2.1.6) to TypeScript + WebGL2 + Web Worker. No engine.
-Original source for reference: `git clone --depth 1 https://github.com/SebLague/Digital-Logic-Sim /tmp/dls`
-(scripts in `Assets/Scripts/{Seb,Simulation,Description,SaveSystem,Game,Graphics}`).
-Architecture overview: `docs/architecture.md`. How the port was done + C#→TS mapping: `docs/porting.md`.
-Rust simulation engine (WebAssembly, default in the worker): `docs/rust-engine.md`.
+Web port of SebLague/Digital-Logic-Sim (Unity C#, v2.1.6): TypeScript + WebGL2 + a simulation Web Worker, no game
+engine. A Rust simulation engine, compiled to WebAssembly, is the default and is 20–86× faster.
 
-## Status
-ALL original C# files are ported (Seb lib, Description, SaveSystem, Simulation, Game, Graphics incl. every menu).
-`bun run check` (typecheck + lint + tests) is green; no tsconfig excludes remain. The app runs (`bun run dev`).
+- Original source for reference: `git clone --depth 1 https://github.com/SebLague/Digital-Logic-Sim /tmp/dls`
+  (scripts in `Assets/Scripts/{Seb,Simulation,Description,SaveSystem,Game,Graphics}`).
+- Docs:
+  - `docs/porting.md`: how the port and the Rust engine were made.
+  - `docs/architecture.md`: runtime structure.
+  - `docs/rust-engine.md`: engine design and why it is exact.
+  - `docs/performance.md`: benchmarks.
 
-Verified in headless Chromium (Playwright): main menu, new project, open project, bottom bar + collection popup,
-placing chips, wiring, toggling inputs, NAND truth table simulated correctly, persistence across reloads (IndexedDB),
-Ctrl+S save of a custom chip (library + auto-star), using it inside another chip (simulates correctly), view mode,
-import of `testdata/Projects/MainTest` (ALU-8 and demo with 7-seg displays render + simulate), library / prefs /
-customize / context menus render like the original. KEY chip responds to held keys. AudioWorklet starts on first
-click. Undo/redo (Ctrl+Z / Ctrl+Shift+Z), select+Delete, zip export->import round trip (ProjectTransfer). Production build (`vite build` + `vite preview`) runs the worker at the 1000 steps/s target.
+## Current state (2026-10-26)
 
-### Rust simulation engine (added after the port)
-`rust/dls-sim`: same semantics as `Simulator.ts` (verified bit-for-bit against a reference port of StepChip), compiled
-flat program + exact truth tables for combinational chips; ~25-120x faster than the JS engine in the browser.
-The worker uses it by default (`src/worker/engines.ts`). Users pick the engine in main menu SETTINGS, in a section
-marked "WEB VERSION ONLY (not in the original)" (AppSettings.Web_SimEngine / Web_TruthTables; applying restarts the
-worker). URL parameters `?engine=js|rust` and `?tables=0|1` override the setting (used by tests). The built module `src/worker/dls_sim.wasm` is committed; rebuild with `bun run build:wasm` after changing the
-Rust code. Tests: `bun run test:rust` + `tests/engines.test.ts`. CI runs both. Details/benchmarks: docs/rust-engine.md.
+- **Branches:** `main` and `claude/blissful-brahmagupta-8yaivk` are identical; everything is merged. Work on the
+  branch, then fast-forward `main` when asked.
+- **Tooling:** Bun (`bun.lock`; `packageManager: bun@1.4.4`). CI (`.github/workflows/ci.yml`) has two jobs:
+  - `check`: bun install, typecheck, lint, test, build;
+  - `rust`: cargo test, then the WebAssembly build.
+
+  Both are green on `main`.
+- **Checks:** `bun run check` (55 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
+  `bun run e2e`, and `bun scripts/e2e-features.cjs` all pass.
+
+### Port (phase 1): complete
+All original C# files are ported: Seb lib, Description, SaveSystem, Simulation, Game, and Graphics with every menu.
+
+Verified in headless Chromium (Playwright):
+- **Projects and storage:**
+  - main menu, new/open project;
+  - persistence (IndexedDB);
+  - import of `testdata/Projects/MainTest`;
+  - zip export/import round trip;
+  - project duplicate/rename/delete/open.
+- **Building and simulating:**
+  - placing and wiring chips, NAND truth table;
+  - Ctrl+S save and using the saved chip inside another;
+  - view mode, undo/redo, delete.
+- **Customize:** resize handles, placing a display on a chip.
+- **Library:** move, star, new collection, jump chip, delete chip (a backup goes to "Deleted Chips", as in the
+  original).
+- **Every display/IO builtin:**
+  - ROM editor and its display modes;
+  - all context actions: pulse width, LED colour, key rebind, bus flip, label;
+  - an RGB display driven by the simulation.
+- **Settings:** the preferences menu, and the engine switch.
+
+### Rust engine (phase 2): complete
+`rust/dls-sim`, compiled to `src/worker/dls_sim.wasm`, which is committed.
+- **Exactness:** same semantics as `src/dls/simulation/Simulator.ts`. The compiled fast path is tested bit for bit
+  against a reference port of `StepChip`.
+- **Speed:**
+  - compiled flat program;
+  - "ready" counters reconstructed instead of tracked;
+  - copy-aliasing pass;
+  - dynamic-reorder swaps patched into the program instead of recompiling.
+- **Truth tables:** exact tables for combinational chips (≤ 16 input bits; cost/size limits in `tables.rs`).
+- **In the worker:** `src/worker/engines.ts` defines `SimEngine`, with `JsEngine` and `WasmEngine`. The worker
+  waits for an `init` message, reports `{type:"engine"}`, and runs steps in adaptive batches.
+- **Engine choice:**
+  - Main menu SETTINGS, section "WEB VERSION ONLY (not in the original)". This stores
+    `AppSettings.Web_SimEngine` / `Web_TruthTables`, and `SimHost.ConfigureEngine` restarts the worker.
+  - URL parameters `?engine=js|rust` and `?tables=0|1` override the setting.
+- **Results:** in Node/WebAssembly, ALU-8 runs 33× faster than JS and RAM-sync 21×. In the browser, RAM-sync runs
+  at about 3,900 steps/s vs 235. See `docs/performance.md` and `docs/benchmarks.json`.
 
 ### Web-specific additions / deviations (keep documented here)
-- `src/main.ts` = UnityMain (rAF loop). Exposes `window.dls` (Project, WorldCam, UIDrawer, IS, Main, Draw, SimHost)
-  for browser tests.
-- Main menu: "QUIT" replaced by "IMPORT" (zip(s) of projects; hold Shift to pick a folder instead). Open-project
-  screen has an extra "EXPORT" button (downloads `<name>.zip` in the original folder layout).
-  Code: `src/dls/saveSystem/ProjectTransfer.ts` (own minimal zip writer/reader; inflate via DecompressionStream).
-- Settings menu: only fullscreen on/off is applied (resolution/vsync are browser controlled). Default AppSettings
-  fullscreenMode = Windowed (3). Fullscreen is applied only when the player presses APPLY (needs user gesture).
-- Sim runs in a worker (`src/worker/simWorker.ts`); Project.SyncWithSimulation replaces the sim-thread frame sync.
-  The worker's engine is the Rust/WebAssembly engine by default (see above); it runs steps in adaptive batches.
-  Project.NotifyExit replaces the worker's root with an empty chip (stops sim + silences audio).
-- Worker pacing: sleeps between batches of steps (setTimeout) instead of busy-waiting; busy only when behind.
-- Input: a mouse button or key press+release within one frame delivers the release on the next frame (InputHelper).
-- ROM "PASTE ALL" uses navigator.clipboard.readText (falls back to the next Ctrl+V paste event).
-- Audio: AudioWorklet (`src/dls/game/audio/`), started on first pointer/key press.
-- Ctrl+N / Ctrl+Q / Ctrl+W can't be intercepted in most browsers — use the MENU popup buttons.
+- **Test hook.** `src/main.ts` is UnityMain (the requestAnimationFrame loop). It exposes `window.dls` (Project,
+  WorldCam, UIDrawer, IS, Main, Draw, SimHost) for browser tests.
+- **Import/export.** On the main menu, "QUIT" is replaced by "IMPORT": zip(s) of projects, or hold Shift to pick a
+  folder. The open-project screen has an extra "EXPORT" button. Code: `src/dls/saveSystem/ProjectTransfer.ts`.
+- **Display settings.** Only fullscreen on/off is applied. The default AppSettings fullscreenMode is Windowed (3).
+  Fullscreen is applied only on APPLY, because it needs a user gesture.
+- **Engine settings.** The web-only engine settings are described above. The settings panel starts higher to fit
+  them.
+- **Simulation in a worker.** `Project.SyncWithSimulation` replaces the original's sim-thread frame sync.
+  `Project.NotifyExit` replaces the worker's root with an empty chip.
+- **Worker pacing.** The worker sleeps between batches instead of busy-waiting.
+- **Input.** A press and release within one frame delivers the release on the next frame (`InputHelper`).
+- **ROM "PASTE ALL"** uses `navigator.clipboard.readText`, falling back to the next Ctrl+V paste event.
+- **Audio** uses an AudioWorklet, started on the first pointer or key press.
+- **Reserved shortcuts.** Ctrl+N / Ctrl+Q / Ctrl+W can't be intercepted; use the MENU popup buttons.
 
 ### Known issues / next steps
-1. Performance in headless Chromium + SwiftShader (software GL) is poor (~4-20 fps) because the bezier text
-   fragment shader (same algorithm as the original TextShader) is expensive on a CPU rasterizer. Expected fine on
-   real GPUs but NOT yet verified on hardware. If needed: cache text into an atlas or skip curves by bbox.
-2. Verified in the browser by `scripts/e2e-features.cjs`: every display/IO builtin placed, ROM editor (edit, display
-   modes, confirm), context actions (pulse width, LED colour, key rebind, bus flip, label), RGB display driven by the
-   sim, save + customize (resize handles, placing a display), library (move/star/new collection, jump chip, delete
-   chip -> backup in "Deleted Chips" like the original), project duplicate/rename/delete/open, preferences menu.
-   Still untested interactively: preference changes being applied (grid/pause toggles), dot display visuals, buzzer
-   sound output on real speakers, the file picker / download UI of import/export (logic is tested).
-3. Browser tests: `bun run e2e` (smoke) and `bun scripts/e2e-features.cjs [shotDir]` (features), both need the dev
-   server on :5173. Helpers in `scripts/e2eHelpers.cjs`. Launch flags for software GL are set there; waits >= 300ms
-   between input events because headless frames are slow. Context menus open upward near the bottom of the screen.
-   Unit tests: `tests/chips.test.ts` (MainTest chips incl. RAM/PC/registers), `tests/builtins.test.ts` (every builtin).
-4. Remove the `window.dls` hook / Draw.Debug* getters if undesired (harmless).
+1. **Rendering speed on real GPUs isn't verified.** In headless Chromium with software GL, rendering runs at about
+   4–20 fps because the bezier text shader is expensive on a CPU. If needed: a text atlas, or skipping curves by
+   bounding box.
+2. **Untested interactively:**
+   - preference toggles taking effect (grid, pause);
+   - dot-display visuals;
+   - buzzer sound on real speakers;
+   - the import/export file-picker and download UI (the underlying logic is tested).
+3. **Possible engine work:**
+   - a dedicated exact op for latch patterns, since RAM-sync is latch-bound;
+   - multi-worker simulation for very large circuits;
+   - building tables asynchronously, since table building briefly blocks the worker on load (2–60 ms per circuit).
+4. **Test hooks.** Remove the `window.dls` hook and the `Draw.Debug*` getters if undesired (they're harmless).
+
+### Gotchas for the next session
+- **Never edit source files while a browser test runs.** Vite reloads the page and the test fails with "project
+  closed" errors. That's not an app bug.
+- **Don't `pkill -f "vite …"` inside a compound command.** It matches and kills its own shell. Start the dev server
+  as a separate background command (`bun run dev`).
+- **Browser tests are slow.** Headless frames are slow, so waits must be at least 300 ms between input events, and
+  `e2e-features.cjs` takes about 8 minutes. Context menus open upward near the bottom of the screen.
+- **Changing the simulator means changing it twice.** Change `Simulator.ts` and `engine.rs` together, then
+  `bun run build:wasm`, `bun run test:rust` and `bun run test`. Regenerate the Rust test fixture with
+  `bun scripts/dumpSimLibrary.ts` if builtin chips change.
+- **Benchmarks.** Update `docs/benchmarks.json` by hand after re-running the benchmarks, then run
+  `bun scripts/perfChart.ts`.
+- **Release-profile panic.** The release profile has no `panic = "abort"`; the separate `wasm` profile does. With
+  abort in the release profile, cargo builds the library twice and the tests fail with serde trait errors.
 
 ## Porting conventions (important)
-- C# structs: Vector2/Color are immutable classes (use .add/.sub/.mul, Vector2.eq for ==). Plain-object structs
-  (PinDescription, SubChipDescription, DisplayDescription, ProjectDescription, AppSettings, ButtonTheme,
-  InputFieldTheme...) must be cloned where C# copies then mutates (clonePinDescription, cloneSubChipDescription,
-  copyProjectDescription, cloneButtonTheme, `{...theme}`, ConnectionInfo.clone).
-- `using (scope)` -> `const s = X.Begin...(); try { ... } finally { s.Dispose(); }`.
-- `out`/tuple returns -> TS tuples. `ref` params -> closures or `{ v }` boxes.
-- Name comparisons case-insensitive: NameMatch/NameKey/NameSet.
-- C# overloads renamed: controller StartPlacing(desc) / StartPlacingByName(name) / StartPlacingAt(desc,pos,dup);
-  CanCompleteWireConnection(pin, wire?) / CanCompleteWireConnectionToWire(wire) -> [bool, pin];
-  UI.DrawPanel(bounds) -> DrawPanelBounds, UI.ModifyPanel(bounds) -> ModifyPanelBounds,
-  UI.UIToScreenSpace(bounds) -> UIToScreenSpaceBounds, UI.DrawScrollView(elements) -> DrawScrollViewElements,
-  UI.WheelSelector(index,...) -> WheelSelectorIndexed, GridHelper.SnapToGrid(Vector2) -> SnapToGridV,
-  GridHelper.SnapMovingElementToGrid(pos, offset) -> SnapMovingElementToGridPos.
-- UI.Button(text, theme, pos, size, enabled, fitTextX, fitTextY, anchor, leftAlign, textOffsetX, ignoreInputs).
-- Static C# classes -> exported const objects (e.g. `export const UIDrawer = {...}`), enums exported separately
-  (`MenuType` in ui/UIDrawer.ts, `SaveMode` in game/Project.ts, `CancelConfirmResult` in ui/MenuHelper.ts).
-- Element type checks: `instanceof SubChipInstance/DevPinInstance/PinInstance/WireInstance`, `IsMoveable(x)`.
-- Sim access from the main thread: SimChipRef (path of subchip IDs). Displays: `simRef.GetDisplayData()`.
-- PinState values are int32 (see PinState.ts).
+- **C# structs.**
+  - Vector2 and Color are immutable classes: use `.add` / `.sub` / `.mul`, and `Vector2.eq` for `==`.
+  - Plain-object structs must be cloned wherever C# copies then mutates. This covers PinDescription,
+    SubChipDescription, DisplayDescription, ProjectDescription, AppSettings, ButtonTheme, InputFieldTheme and
+    others.
+  - Helpers: `clonePinDescription`, `cloneSubChipDescription`, `copyProjectDescription`, `cloneButtonTheme`,
+    `{...theme}`, `ConnectionInfo.clone`.
+- **`using (scope)`** becomes `const s = X.Begin...(); try { ... } finally { s.Dispose(); }`.
+- **`out` / tuple returns** become TS tuples. **`ref` params** become closures or `{ v }` boxes.
+- **Name comparisons** are case-insensitive: `NameMatch` / `NameKey` / `NameSet`.
+- **Renamed C# overloads:**
+  - Controller: `StartPlacing(desc)` / `StartPlacingByName(name)` / `StartPlacingAt(desc, pos, dup)`.
+  - `CanCompleteWireConnection(pin, wire?)` / `CanCompleteWireConnectionToWire(wire)` returns `[bool, pin]`.
+  - UI: `DrawPanelBounds`, `ModifyPanelBounds`, `UIToScreenSpaceBounds`, `DrawScrollViewElements`,
+    `WheelSelectorIndexed`.
+  - GridHelper: `SnapToGridV`, `SnapMovingElementToGridPos`.
+- **`UI.Button` signature:** `UI.Button(text, theme, pos, size, enabled, fitTextX, fitTextY, anchor, leftAlign,
+  textOffsetX, ignoreInputs)`.
+- **Static C# classes** become exported const objects. Enums are exported separately: `MenuType`, `SaveMode`,
+  `CancelConfirmResult`.
+- **Element type checks** use `instanceof` (SubChipInstance / DevPinInstance / PinInstance / WireInstance) and
+  `IsMoveable(x)`.
+- **Sim access from the main thread** goes through `SimChipRef` (a path of subchip IDs). Displays read
+  `simRef.GetDisplayData()`.
+- **PinState values** are int32 in TS and u32 in Rust (same bits).
 
 ## Tooling
-- `bun run check` = typecheck + lint (Biome, warnings are errors) + tests. CI also runs `vite build`.
-- Commit + push after every file group (user's usage is limited). Update this file when status changes.
+- `bun run check` runs typecheck + lint (Biome, warnings are errors) + tests. CI also builds, and runs the Rust job.
+- Commit and push after every file group (the user's usage is limited). Update this file when the status changes.

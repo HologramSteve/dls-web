@@ -2,7 +2,7 @@
 
 A second implementation of the simulator in Rust, compiled to WebAssembly and used by the simulation worker by
 default. It has the **same semantics** as the TypeScript port of the original simulator
-(`src/dls/simulation/Simulator.ts`) and is roughly 25–120× faster in the browser.
+(`src/dls/simulation/Simulator.ts`) and is 20–86× faster (see [performance.md](performance.md)).
 
 The TypeScript simulator stays in the code base as the faithful reference port and as a fallback. Choose the engine
 in the main menu SETTINGS screen, in a section marked "WEB VERSION ONLY (not in the original)": Sim engine
@@ -114,28 +114,16 @@ is replaced by xorshift, and the per-frame PCG seed comes from it. They are rand
 
 ## Benchmarks
 
-Steps per second on chips from the original's test project, with inputs changing every 100 steps. Measured on one
-core of a 2.1 GHz Xeon, Node 22 / Rust 1.97. Numbers vary by ±10%.
+See [performance.md](performance.md) for all measurements: WebAssembly vs JS, native step by step, in-app, and how to
+reproduce them. Summary, in steps per second (WebAssembly, one core):
 
-| Chip (size) | JS engine | Rust native: reference | Rust native: fast | Rust native: fast + tables | WASM | WASM + tables |
-| --- | --- | --- | --- | --- | --- | --- |
-| ALU-8 (~350 NANDs) | 23,000 | 45,000 | 660,000 | 1,100,000 | 444,000 | 830,000 |
-| PC (~1.2k NANDs) | 3,800–4,900 | 14,000 | 335,000 | 510,000 | 196,000 | 441,000 |
-| demo (~1.1k NANDs + displays) | 5,500–7,100 | 16,000 | 320,000 | 557,000 | 219,000 | 329,000 |
-| WIP2 (~5.7k NANDs) | 630–740 | 1,200 | 44,000 | 73,000 | 33,000 | 52,000 |
-| RAM-sync (~24k NANDs, 96k wires) | 170 | 300 | 3,800 | 3,800 | 4,650 | 4,000 |
-
-In the app (headless Chromium, `scripts/e2e.cjs`), RAM-sync runs at about 4,000 steps/s with the Rust engine and
-about 235 with the JS engine.
-
-- **Tables help combinational logic most.** ALU-8 is about 2× the fast path, and PC about 1.5–2×.
-- **They barely help RAM-sync.** It is almost entirely latches (feedback loops), which can't be tabled. Its speed-up
-  comes from the flat program and aliasing.
-- **Table build time** is 2–60 ms per circuit (native).
-
-Reproduce:
-- `bun run bench:rust` for native.
-- `bun run bench` for JS vs WASM.
+| Circuit | JS engine | Rust | Rust + truth tables |
+| --- | --- | --- | --- |
+| ALU-8 (317 NANDs) | 21,783 | 439,254 | 719,394 (33×) |
+| demo (1,084 NANDs) | 6,021 | 242,308 | 520,495 (86×) |
+| PC (1,216 NANDs) | 5,353 | 202,621 | 350,493 (65×) |
+| WIP2 (5,709 NANDs) | 705 | 34,541 | 54,089 (77×) |
+| RAM-sync (23,989 NANDs) | 164 | 3,526 (21×) | 3,505 |
 
 ## Limitations / notes
 
