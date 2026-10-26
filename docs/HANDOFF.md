@@ -66,6 +66,10 @@ Verified in headless Chromium (Playwright):
   at about 3,900 steps/s vs 235. See `docs/performance.md` and `docs/benchmarks.json`.
 
 ### Live collaboration (phase 3): complete
+**Live at https://slopjector.gay.** It is deployed from the private `HologramSteve/projects` repo: a docker-compose service
+built from this repo's `main` (git build context), behind Caddy, on 127.0.0.1:8790. A push here doesn't redeploy
+by itself; the next deploy of `projects` rebuilds it.
+
 Rooms with codes on one central server (`server/`, Bun), client in `src/collab/`. Full description:
 `docs/collaboration.md`.
 - **Sync.** Project files sync through a `FileSystem.onChange` hook. The edited chip syncs element by element
