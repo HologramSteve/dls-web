@@ -9,6 +9,9 @@ export interface SimChipDesc {
 	ChipType: ChipType;
 	InputPinIDs: number[];
 	OutputPinIDs: number[];
+	// Bit counts of the pins (used by the Rust engine to build truth tables)
+	InputPinBits?: number[];
+	OutputPinBits?: number[];
 	SubChips: { Name: string; ID: number; InternalData: number[] | null }[];
 	Wires: { Source: PinAddress; Target: PinAddress }[];
 }

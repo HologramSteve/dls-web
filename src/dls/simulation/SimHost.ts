@@ -15,6 +15,8 @@ export function ToSimDesc(desc: ChipDescription): SimChipDesc {
 		ChipType: desc.ChipType,
 		InputPinIDs: desc.InputPins.map((p) => p.ID),
 		OutputPinIDs: desc.OutputPins.map((p) => p.ID),
+		InputPinBits: desc.InputPins.map((p) => p.BitCount),
+		OutputPinBits: desc.OutputPins.map((p) => p.BitCount),
 		SubChips: desc.SubChips.map((s) => ({ Name: s.Name, ID: s.ID, InternalData: s.InternalData ? s.InternalData.slice() : null })),
 		Wires: desc.Wires.map((w) => ({ Source: { PinID: w.SourcePinAddress.PinID, PinOwnerID: w.SourcePinAddress.PinOwnerID }, Target: { PinID: w.TargetPinAddress.PinID, PinOwnerID: w.TargetPinAddress.PinOwnerID } })),
 	};

@@ -1,0 +1,19 @@
+[package]
+name = "dls-sim"
+version = "0.1.0"
+edition = "2021"
+description = "Fast Digital Logic Sim simulation engine (same semantics as the original's Simulator), compiled to native and WebAssembly"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
