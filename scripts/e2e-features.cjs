@@ -108,5 +108,55 @@ const { launch } = require("./e2eHelpers.cjs");
 	check((await ev(() => window.dls.Project.ActiveProject.ViewedChip.GetSubchips().find((c) => c.Description.Name === "PULSE").Label)) === "P1", "pulse labelled");
 	await h.move(640, 600);
 	await h.shot("f08_after_edits");
+
+	// ---- RGB display driven by the simulation ----
+	await h.newProject("DisplayTest");
+	await h.place("RGB DISPLAY", 760, 330);
+	const srcs = [["IN-8", 300, 140], ["IN-4", 300, 220], ["IN-4", 300, 290], ["IN-4", 300, 360], ["IN-1", 300, 470], ["IN-1", 300, 520], ["CLOCK", 420, 620]];
+	for (const [n, x, y] of srcs) await h.place(n, x, y);
+	const geo = await ev(() => {
+		const els = window.dls.Project.ActiveProject.ViewedChip.Elements;
+		const disp = els.find((e) => e.Description?.Name === "RGB DISPLAY");
+		const pos = (p) => [p.GetWorldPos().x, p.GetWorldPos().y];
+		return {
+			disp: disp.InputPins.map(pos),
+			srcs: els.filter((e) => e !== disp).map((e) => (e.Pin ? pos(e.Pin) : pos(e.OutputPins[0]))),
+		};
+	});
+	check(geo.srcs.length === 7, "placed display inputs");
+	// display pins: ADDRESS RED GREEN BLUE RESET WRITE REFRESH CLOCK ; sources in the same order minus RESET
+	const targets = [0, 1, 2, 3, 5, 6, 7];
+	for (let i = 0; i < 7; i++) {
+		const a = await h.toScreen(geo.srcs[i]);
+		const b = await h.toScreen(geo.disp[targets[i]]);
+		await h.click(a[0], a[1]);
+		await h.move(b[0], b[1]);
+		await h.click(b[0], b[1]);
+	}
+	check((await ev(() => window.dls.Project.ActiveProject.ViewedChip.Wires.length)) === 7, "display wired");
+	const setInputs = (vals) =>
+		ev((vals) => {
+			const ins = window.dls.Project.ActiveProject.ViewedChip.GetInputPins();
+			vals.forEach((v, i) => (ins[i].Pin.PlayerInputState = v));
+		}, vals);
+	await setInputs([0, 15, 0, 0, 1, 0]);
+	await wait(800);
+	await setInputs([0, 15, 0, 0, 1, 1]);
+	await wait(800);
+	await setInputs([255, 0, 15, 0, 1, 1]);
+	await wait(800);
+	await setInputs([17, 0, 0, 15, 1, 1]);
+	await wait(800);
+	await setInputs([0, 0, 0, 0, 0, 0]);
+	await h.move(640, 690);
+	await wait(1200);
+	await h.shot("f09_rgb_display");
+	const pix = await ev(() => {
+		const d = window.dls.Project.ActiveProject.ViewedChip.GetSubchips()[0];
+		const data = window.dls.Project.ActiveProject.ViewedChip.SimChip.GetSubChipFromID(d.ID).GetDisplayData();
+		return data ? [data.InternalState[0], data.InternalState[255], data.InternalState[17]] : null;
+	});
+	console.log(" rgb pixels:", pix);
+	check(pix && pix[0] === 15 && pix[1] === 15 << 4 && pix[2] === 15 << 8, "RGB display pixels written");
 	await h.finish();
 })();
