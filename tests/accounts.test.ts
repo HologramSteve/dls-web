@@ -128,15 +128,15 @@ describe("cloud projects", () => {
 
 		const got = m.GetProject(user, "MY CPU");
 		expect(got.ok && got.value.files["Chips/AND.json"]).toBe('{"b":1}');
-		expect(m.ListProjects(user).map((p) => p.version)).toEqual([3]);
+		expect(m.ListProjects(user).projects.map((p) => p.version)).toEqual([3]);
 
 		// Another user doesn't see it
 		const bob = await SignedIn(m, "bob");
-		expect(m.ListProjects(bob.user)).toEqual([]);
+		expect(m.ListProjects(bob.user)).toEqual({ projects: [], shared: [] });
 		expect(m.GetProject(bob.user, "My CPU").ok).toBe(false);
 
 		expect(m.DeleteProject(user, "My CPU").ok).toBe(true);
-		expect(m.ListProjects(user)).toEqual([]);
+		expect(m.ListProjects(user).projects).toEqual([]);
 		expect(m.DeleteProject(user, "My CPU").ok).toBe(false);
 	});
 
@@ -153,6 +153,84 @@ describe("cloud projects", () => {
 		expect(third.ok || third.status).toBe(413);
 		const big = m.PutProject(user, "P", Files("P", "x".repeat(400)), 1, false);
 		expect(big.ok || big.status).toBe(413);
+	});
+});
+
+describe("collaborators", () => {
+	it("owners share projects; editors upload to the owner's project, viewers only read", async () => {
+		const store = new MemoryStore();
+		const m = new AccountManager(store);
+		const alice = await SignedIn(m, "alice");
+		const bob = await SignedIn(m, "bob");
+		const carol = await SignedIn(m, "carol");
+		m.PutProject(alice.user, "CPU", Files("CPU"), 0, false);
+
+		// Only the owner manages collaborators; unknown users and the owner can't be added
+		expect(m.SetCollaborator(bob.user, "CPU", "alice", "bob", "editor").ok).toBe(false);
+		expect(m.SetCollaborator(alice.user, "CPU", null, "nobody", "editor").ok).toBe(false);
+		expect(m.SetCollaborator(alice.user, "CPU", null, "alice", "editor").ok).toBe(false);
+		expect(m.SetCollaborator(alice.user, "CPU", null, "Bob", "editor").ok).toBe(true);
+		const shared = m.SetCollaborator(alice.user, "cpu", null, "carol", "viewer");
+		expect(shared.ok && shared.value?.collaborators).toEqual([
+			{ username: "bob", role: "editor" },
+			{ username: "carol", role: "viewer" },
+		]);
+
+		// Listed as shared, with the user's role; collaborators aren't shown to them
+		const bobList = m.ListProjects(bob.user);
+		expect(bobList.projects).toEqual([]);
+		expect(bobList.shared).toMatchObject([{ name: "CPU", owner: "alice", role: "editor", version: 1 }]);
+		expect(bobList.shared[0].collaborators).toBeUndefined();
+		expect(m.ListProjects(carol.user).shared[0].role).toBe("viewer");
+
+		// Bob edits while Alice is away; it's Alice's project (and storage)
+		expect(m.GetProject(bob.user, "CPU", "alice").ok).toBe(true);
+		const put = m.PutProject(bob.user, "CPU", Files("CPU", '{"bob":1}'), 1, false, "alice");
+		expect(put.ok && put.value).toMatchObject({ version: 2, owner: "alice", role: "editor", updatedBy: "bob" });
+		const aliceView = m.GetProject(alice.user, "CPU");
+		expect(aliceView.ok && aliceView.value.files["Chips/AND.json"]).toBe('{"bob":1}');
+		expect(m.ListProjects(bob.user).projects).toEqual([]);
+		// Same versioning as devices: a stale upload conflicts
+		const stale = m.PutProject(alice.user, "CPU", Files("CPU"), 1, false);
+		expect(stale.ok || stale.status).toBe(409);
+
+		// Carol only views; nobody else sees it; an editor can't create projects in the owner's space
+		const carolPut = m.PutProject(carol.user, "CPU", Files("CPU"), 2, false, "alice");
+		expect(carolPut.ok || carolPut.status).toBe(403);
+		expect(m.GetProject(carol.user, "CPU", "alice").ok).toBe(true);
+		const dave = await SignedIn(m, "dave");
+		expect(m.GetProject(dave.user, "CPU", "alice").ok).toBe(false);
+		expect(m.PutProject(bob.user, "Other", Files(), 0, false, "alice").ok).toBe(false);
+
+		// Shares survive a restart
+		m.Flush();
+		const m2 = new AccountManager(store);
+		const bob2 = m2.Authenticate(bob.token)!;
+		expect(m2.ListProjects(bob2).shared.map((p) => p.name)).toEqual(["CPU"]);
+
+		// Bob leaves; Carol is removed; the project is deleted
+		expect(m2.SetCollaborator(bob2, "CPU", "alice", "bob", null).ok).toBe(true);
+		expect(m2.ListProjects(bob2).shared).toEqual([]);
+		const alice2 = m2.Authenticate(alice.token)!;
+		m2.SetCollaborator(alice2, "CPU", null, "carol", "editor");
+		const carol2 = m2.Authenticate(carol.token)!;
+		expect(m2.ListProjects(carol2).shared[0].role).toBe("editor");
+		m2.DeleteProject(alice2, "CPU");
+		expect(m2.ListProjects(carol2).shared).toEqual([]);
+	});
+
+	it("deleting an account removes its shares both ways", async () => {
+		const m = new AccountManager(new MemoryStore());
+		const alice = await SignedIn(m, "alice");
+		const bob = await SignedIn(m, "bob");
+		m.PutProject(alice.user, "A", Files("A"), 0, false);
+		m.PutProject(bob.user, "B", Files("B"), 0, false);
+		m.SetCollaborator(alice.user, "A", null, "bob", "editor");
+		m.SetCollaborator(bob.user, "B", null, "alice", "viewer");
+		await m.DeleteAccount(bob.user, "correct horse");
+		const list = m.ListProjects(alice.user);
+		expect(list.shared).toEqual([]);
+		expect(list.projects[0].collaborators).toEqual([]);
 	});
 });
 
@@ -182,10 +260,20 @@ describe("accounts HTTP API", () => {
 		expect((await call(m, "DELETE", "projects/My%20CPU", undefined, token)).status).toBe(200);
 		expect((await call(m, "GET", "projects/My%20CPU", undefined, token)).status).toBe(404);
 
+		// Sharing over the API
+		await call(m, "PUT", "projects/Shared", { files: Files("Shared") }, token);
+		const bob = (await call(m, "POST", "auth/register", { username: "bob", password: "correct horse" })).body.token as string;
+		expect((await call(m, "POST", "projects/Shared/collaborators", { username: "bob", role: "editor" }, token)).body.collaborators).toEqual([{ username: "bob", role: "editor" }]);
+		expect((await call(m, "GET", "projects", undefined, bob)).body.shared[0]).toMatchObject({ name: "Shared", owner: "alice" });
+		expect((await call(m, "PUT", "projects/Shared?owner=alice", { files: Files("Shared"), base: 1 }, bob)).body.version).toBe(2);
+		expect((await call(m, "DELETE", "projects/Shared?owner=alice", undefined, bob)).status).toBe(403);
+		expect((await call(m, "POST", "projects/Shared/collaborators?owner=alice", { username: "bob", role: null }, bob)).status).toBe(200);
+		expect((await call(m, "GET", "projects/Shared?owner=alice", undefined, bob)).status).toBe(404);
+
 		expect((await call(m, "POST", "auth/logout", undefined, token)).status).toBe(200);
 		expect((await call(m, "GET", "auth/me", undefined, token)).status).toBe(401);
 		expect((await call(m, "POST", "auth/login", { username: "alice", password: "correct horse" })).status).toBe(200);
-		expect((await call(m, "POST", "auth/register", { username: "bob", password: "correct horse" }, undefined, { ...features, registration: false })).status).toBe(403);
+		expect((await call(m, "POST", "auth/register", { username: "carol", password: "correct horse" }, undefined, { ...features, registration: false })).status).toBe(403);
 	});
 });
 

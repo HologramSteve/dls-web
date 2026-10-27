@@ -5,15 +5,18 @@
 //   versions automatically while it is not open there.
 // - Versions: each upload says which cloud version it is based on. If another device uploaded in between, the upload
 //   is refused and the project is in conflict until the user picks "keep mine" or "use the cloud copy".
+// - Collaborators: an owner can share a cloud project with other users. It is downloaded into its own local folder,
+//   "<name> (<owner>)". Editors sync it like their own projects; for viewers it is read-only and only downloaded.
 import { Main } from "../dls/game/Main";
 import { Project } from "../dls/game/Project";
 import { MenuType, UIDrawer } from "../dls/graphics/ui/UIDrawer";
 import { FileSystem, PathCombine } from "../dls/saveSystem/FileSystem";
 import { SavePaths } from "../dls/saveSystem/SavePaths";
 import { Loader } from "../dls/saveSystem/Saver";
+import { CollabState } from "../collab/CollabState";
 import { IsValidProjectFilePath, ProjectFile } from "../collab/Protocol";
 import { ServerHttpBase } from "../web/Features";
-import { CloudNameKey, type CloudProject, type CloudProjectInfo, type CloudUser } from "./CloudProtocol";
+import { CloudNameKey, type CloudProject, type CloudProjectInfo, type CloudUser, type CollaboratorRole, type ProjectList, type ProjectRole } from "./CloudProtocol";
 
 const TokenStorage = "dls-cloud-token";
 const UserStorage = "dls-cloud-user";
@@ -22,9 +25,12 @@ const UploadDelayMs = 1500;
 const RetryDelayMs = 15000;
 const SyncIntervalMs = 60000;
 
-// A local project that syncs with the cloud
+// A local project that syncs with a cloud project
 interface Link {
-	name: string; // local folder name (= cloud name)
+	name: string; // local folder name
+	cloud: string; // cloud project name
+	owner: string; // cloud project owner's username
+	role: ProjectRole;
 	version: number; // cloud version the local copy is based on (0: never uploaded)
 	dirty: boolean; // local changes not uploaded yet
 }
@@ -82,7 +88,8 @@ export function ReadProjectFiles(name: string): Record<string, string> {
 
 class CloudSession {
 	user: CloudUser | null = null;
-	projects: CloudProjectInfo[] = [];
+	projects: CloudProjectInfo[] = []; // own
+	shared: CloudProjectInfo[] = []; // others', shared with the user
 	lastError = "";
 	busy = false; // an account request is running (sign in, ...)
 	private token: string | null = null;
@@ -119,6 +126,8 @@ class CloudSession {
 		}
 		if (this.user) this.LoadLinks();
 		FileSystem.AddChangeListener((path) => this.OnLocalFileChange(path));
+		// Projects shared as viewer can't be edited (same switch as a viewer in a live collaboration room)
+		CollabState.CloudReadOnly = () => this.IsOpenProjectViewOnly();
 		if (this.token) {
 			// Check the session is still valid, then catch up
 			this.Request<{ user: CloudUser }>("GET", "auth/me").then(
@@ -210,6 +219,7 @@ class CloudSession {
 		this.user = null;
 		this.token = null;
 		this.projects = [];
+		this.shared = [];
 		this.links = {};
 		this.conflicts.clear();
 		const ls = LocalStore();
@@ -225,26 +235,73 @@ class CloudSession {
 		} catch {
 			this.links = {};
 		}
+		for (const link of Object.values(this.links)) {
+			// (links from before collaborators: always the user's own project, same name)
+			link.cloud ??= link.name;
+			link.owner ??= this.user!.username;
+			link.role ??= "owner";
+		}
 	}
 
 	private SaveLinks() {
 		if (this.user) LocalStore()?.setItem(LinksStorage + this.user.id, JSON.stringify(this.links));
 	}
 
-	IsLinked(name: string): boolean {
-		return this.links[CloudNameKey(name)] != null;
+	IsOwn(info: CloudProjectInfo): boolean {
+		return info.role === "owner";
 	}
 
-	StateOf(name: string): ProjectSyncState {
-		const key = CloudNameKey(name);
-		const link = this.links[key];
-		const cloud = this.projects.find((p) => CloudNameKey(p.name) === key);
-		if (!link) return Loader.ProjectExists(name) ? "local-only" : "cloud-only";
+	// Local folder of a cloud project: its name for the user's own projects, "<name> (<owner>)" for shared ones
+	LocalNameFor(info: CloudProjectInfo): string {
+		const link = this.LinkFor(info);
+		if (link) return link.name;
+		if (this.IsOwn(info)) return info.name;
+		return `${info.name} (${info.owner.replace(/\./g, "_")})`;
+	}
+
+	LinkFor(info: CloudProjectInfo): Link | null {
+		const owner = info.owner.toLowerCase();
+		const key = CloudNameKey(info.name);
+		return Object.values(this.links).find((l) => l.owner.toLowerCase() === owner && CloudNameKey(l.cloud) === key) ?? null;
+	}
+
+	private InfoFor(link: Link): CloudProjectInfo | null {
+		const owner = link.owner.toLowerCase();
+		const key = CloudNameKey(link.cloud);
+		return [...this.projects, ...this.shared].find((p) => p.owner.toLowerCase() === owner && CloudNameKey(p.name) === key) ?? null;
+	}
+
+	IsLinked(localName: string): boolean {
+		return this.links[CloudNameKey(localName)] != null;
+	}
+
+	// Sync state of a cloud project (on this device)
+	StateOf(info: CloudProjectInfo): ProjectSyncState {
+		const link = this.LinkFor(info);
+		if (!link) return "cloud-only";
+		const key = CloudNameKey(link.name);
 		if (this.conflicts.has(key)) return "conflict";
 		if (this.uploading.has(key)) return "uploading";
 		if (link.dirty) return "pending";
-		if (cloud && cloud.version > link.version) return "update";
+		if (info.version > link.version) return "update";
 		return "synced";
+	}
+
+	StateOfLocal(localName: string): ProjectSyncState {
+		const link = this.links[CloudNameKey(localName)];
+		const info = link ? this.InfoFor(link) : null;
+		return info ? this.StateOf(info) : "local-only";
+	}
+
+	// Local projects that aren't in the cloud (nor would be replaced by downloading one of the user's own)
+	LocalOnlyProjects(): string[] {
+		const own = new Set(this.projects.map((p) => CloudNameKey(p.name)));
+		return LocalProjectNames().filter((n) => !this.IsLinked(n) && !own.has(CloudNameKey(n)));
+	}
+
+	IsOpenProjectViewOnly(): boolean {
+		const open = OpenProjectName();
+		return open != null && this.user != null && this.links[CloudNameKey(open)]?.role === "viewer";
 	}
 
 	// ---- Local changes ----
@@ -254,7 +311,7 @@ class CloudSession {
 		if (!m) return;
 		const key = CloudNameKey(m[1]);
 		const link = this.links[key];
-		if (!link) {
+		if (!link || link.role === "viewer") {
 			if (path.endsWith("/" + ProjectFile)) this.Changed(); // (a project was created, renamed or deleted: the panel lists it)
 			return;
 		}
@@ -279,30 +336,35 @@ class CloudSession {
 		for (const link of Object.values(this.links)) if (link.dirty) await this.Upload(link.name);
 	}
 
-	// Start syncing a local project: it is uploaded now and after every save
+	// Start syncing one of the user's local projects: it is uploaded now and after every save
 	async Link(name: string) {
 		if (!this.user) return;
 		const key = CloudNameKey(name);
 		const cloud = this.projects.find((p) => CloudNameKey(p.name) === key);
 		if (cloud && !confirm(`"${cloud.name}" is already in your cloud storage. Replace it with this device's copy?`)) return;
-		this.links[key] = { name, version: cloud?.version ?? 0, dirty: true };
+		this.links[key] = { name, cloud: name, owner: this.user.username, role: "owner", version: cloud?.version ?? 0, dirty: true };
 		this.SaveLinks();
-		await this.Upload(name);
+		await this.Upload(name, cloud != null);
 	}
 
 	// Stop syncing (both copies stay)
-	Unlink(name: string) {
-		const key = CloudNameKey(name);
+	Unlink(localName: string) {
+		const key = CloudNameKey(localName);
 		delete this.links[key];
 		this.conflicts.delete(key);
 		this.SaveLinks();
 		this.Changed();
 	}
 
-	private async Upload(name: string, force = false) {
-		const key = CloudNameKey(name);
+	private ProjectPath(cloudName: string, owner: string): string {
+		const own = this.user != null && owner.toLowerCase() === this.user.username.toLowerCase();
+		return "projects/" + encodeURIComponent(cloudName) + (own ? "" : "?owner=" + encodeURIComponent(owner));
+	}
+
+	private async Upload(localName: string, force = false) {
+		const key = CloudNameKey(localName);
 		const link = this.links[key];
-		if (!link || !this.user || this.uploading.has(key)) return;
+		if (!link || !this.user || this.uploading.has(key) || link.role === "viewer") return;
 		if (this.conflicts.has(key) && !force) return;
 		if (!Loader.ProjectExists(link.name)) {
 			// Deleted or renamed on this device: stop syncing it (the cloud copy stays)
@@ -313,7 +375,9 @@ class CloudSession {
 		this.changedWhileUploading.delete(key);
 		this.Changed();
 		try {
-			const info = await this.Request<CloudProjectInfo>("PUT", "projects/" + encodeURIComponent(link.name), { files: ReadProjectFiles(link.name), base: link.version, force });
+			const files = ReadProjectFiles(link.name);
+			if (link.name !== link.cloud) files[ProjectFile] = WithProjectName(files[ProjectFile], link.cloud);
+			const info = await this.Request<CloudProjectInfo>("PUT", this.ProjectPath(link.cloud, link.owner), { files, base: link.version, force });
 			link.version = info.version;
 			link.dirty = this.changedWhileUploading.has(key);
 			this.conflicts.delete(key);
@@ -324,6 +388,7 @@ class CloudSession {
 			else {
 				this.Report(e);
 				if (!(e instanceof ApiError)) this.ScheduleUpload(RetryDelayMs); // (offline: try again later)
+				else if (e.status === 403 || e.status === 404) void this.SyncAll(); // (no longer an editor: the list says what changed)
 			}
 		} finally {
 			this.uploading.delete(key);
@@ -334,15 +399,19 @@ class CloudSession {
 	}
 
 	private SetCloudInfo(info: CloudProjectInfo) {
-		const key = CloudNameKey(info.name);
-		this.projects = [info, ...this.projects.filter((p) => CloudNameKey(p.name) !== key)].sort((a, b) => b.updated - a.updated);
+		const same = (p: CloudProjectInfo) => p.owner.toLowerCase() === info.owner.toLowerCase() && CloudNameKey(p.name) === CloudNameKey(info.name);
+		const byTime = (a: CloudProjectInfo, b: CloudProjectInfo) => b.updated - a.updated;
+		if (this.IsOwn(info)) this.projects = [info, ...this.projects.filter((p) => !same(p))].sort(byTime);
+		else this.shared = [info, ...this.shared.filter((p) => !same(p))].sort(byTime);
 	}
 
 	// ---- Cloud → local ----
 	async Refresh() {
 		if (!this.user) return;
 		try {
-			this.projects = (await this.Request<{ projects: CloudProjectInfo[] }>("GET", "projects")).projects;
+			const list = await this.Request<ProjectList>("GET", "projects");
+			this.projects = list.projects;
+			this.shared = list.shared;
 		} catch (e) {
 			this.Report(e);
 		}
@@ -355,55 +424,63 @@ class CloudSession {
 		if (!this.user) return;
 		for (const link of Object.values(this.links)) {
 			const key = CloudNameKey(link.name);
-			const cloud = this.projects.find((p) => CloudNameKey(p.name) === key);
+			const cloud = this.InfoFor(link);
+			if (cloud && cloud.role !== link.role) {
+				// (the owner changed this user's role)
+				link.role = cloud.role;
+				if (link.role === "viewer") link.dirty = false;
+				this.SaveLinks();
+			}
 			if (!Loader.ProjectExists(link.name)) this.Unlink(link.name);
 			else if (!cloud) {
-				// Deleted from the cloud (on another device): stop syncing. Never uploaded yet: upload.
-				if (link.version > 0) this.Unlink(link.name);
+				// Deleted from the cloud, or no longer shared with the user: stop syncing (the local copy stays).
+				// Never uploaded yet: upload.
+				if (link.version > 0 || link.role !== "owner") this.Unlink(link.name);
 				else await this.Upload(link.name);
 			} else if (cloud.version > link.version) {
 				if (link.dirty) {
 					this.conflicts.add(key);
 					this.Changed();
-				} else if (!IsProjectOpen(link.name)) await this.Download(cloud.name, false);
+				} else if (!IsProjectOpen(link.name)) await this.Download(cloud, false);
 			} else if (link.dirty) await this.Upload(link.name);
 		}
 	}
 
-	// Download a cloud project into the local projects (replacing a local project of the same name) and link it
-	async Download(name: string, ask = true): Promise<boolean> {
-		if (IsProjectOpen(name)) {
-			this.lastError = `Close "${name}" first (go back to the main menu).`;
+	// Download a cloud project into its local folder (replacing a local project of the same name) and link it
+	async Download(info: CloudProjectInfo, ask = true): Promise<boolean> {
+		const local = this.LocalNameFor(info);
+		if (IsProjectOpen(local)) {
+			this.lastError = `Close "${local}" first (go back to the main menu).`;
 			this.Changed();
 			return false;
 		}
-		if (ask && Loader.ProjectExists(name) && !this.IsLinked(name) && !confirm(`Replace the project "${name}" on this device with the cloud copy?`)) return false;
+		if (ask && Loader.ProjectExists(local) && !this.IsLinked(local) && !confirm(`Replace the project "${local}" on this device with the cloud copy?`)) return false;
 		let project: CloudProject;
 		try {
-			project = await this.Request<CloudProject>("GET", "projects/" + encodeURIComponent(name));
+			project = await this.Request<CloudProject>("GET", this.ProjectPath(info.name, info.owner));
 		} catch (e) {
 			this.Report(e);
 			this.Changed();
 			return false;
 		}
-		if (IsProjectOpen(name)) return false; // (opened meanwhile)
+		if (IsProjectOpen(local)) return false; // (opened meanwhile)
 		// Keep the local folder name if it differs only in case
-		const local = LocalProjectNames().find((n) => CloudNameKey(n) === CloudNameKey(project.name)) ?? project.name;
+		const folder = LocalProjectNames().find((n) => CloudNameKey(n) === CloudNameKey(local)) ?? local;
 		this.writingFiles = true;
 		try {
-			const dir = SavePaths.GetProjectPath(local);
+			const dir = SavePaths.GetProjectPath(folder);
 			FileSystem.DeleteDirectory(dir);
 			for (const [rel, content] of Object.entries(project.files)) {
 				if (!IsValidProjectFilePath(rel)) continue;
-				FileSystem.WriteAllText(PathCombine(dir, rel), rel === ProjectFile ? WithProjectName(content, local) : content);
+				FileSystem.WriteAllText(PathCombine(dir, rel), rel === ProjectFile ? WithProjectName(content, folder) : content);
 			}
 		} finally {
 			this.writingFiles = false;
 		}
-		const key = CloudNameKey(local);
-		this.links[key] = { name: local, version: project.version, dirty: false };
+		const key = CloudNameKey(folder);
+		this.links[key] = { name: folder, cloud: project.name, owner: project.owner, role: project.role, version: project.version, dirty: false };
 		this.conflicts.delete(key);
-		this.SetCloudInfo(project);
+		this.SetCloudInfo({ ...project, files: undefined } as CloudProjectInfo);
 		this.SaveLinks();
 		this.lastError = "";
 		this.Changed();
@@ -411,32 +488,63 @@ class CloudSession {
 	}
 
 	// Download and open (from the main menu)
-	async Open(name: string) {
-		if (!(await this.Download(name))) return;
+	async Open(info: CloudProjectInfo) {
+		if (!(await this.Download(info))) return;
 		if (UIDrawer.ActiveMenu === MenuType.MainMenu) {
-			const local = LocalProjectNames().find((n) => CloudNameKey(n) === CloudNameKey(name));
-			if (local) Main.CreateOrLoadProject(local, "");
+			const link = this.LinkFor(info);
+			if (link) Main.CreateOrLoadProject(link.name, "");
 		}
 	}
 
 	// Conflict: keep this device's copy (overwrite the cloud) or take the cloud's (discard local changes)
-	async ResolveConflict(name: string, keep: "mine" | "cloud") {
-		const key = CloudNameKey(name);
+	async ResolveConflict(info: CloudProjectInfo, keep: "mine" | "cloud") {
+		const link = this.LinkFor(info);
+		if (!link) return;
+		const key = CloudNameKey(link.name);
 		if (keep === "mine") {
 			this.conflicts.delete(key);
-			await this.Upload(name, true);
+			await this.Upload(link.name, true);
 		} else {
-			const link = this.links[key];
-			if (link) link.dirty = false;
-			if (!(await this.Download(name, false)) && link) link.dirty = true;
+			link.dirty = false;
+			if (!(await this.Download(info, false))) link.dirty = true;
 		}
 	}
 
-	async DeleteFromCloud(name: string) {
+	async DeleteFromCloud(info: CloudProjectInfo) {
 		try {
-			await this.Request("DELETE", "projects/" + encodeURIComponent(name));
-			this.projects = this.projects.filter((p) => CloudNameKey(p.name) !== CloudNameKey(name));
-			if (this.IsLinked(name)) this.Unlink(name);
+			await this.Request("DELETE", this.ProjectPath(info.name, info.owner));
+			this.projects = this.projects.filter((p) => p !== info);
+			const link = this.LinkFor(info);
+			if (link) this.Unlink(link.name);
+		} catch (e) {
+			this.Report(e);
+		}
+		this.Changed();
+	}
+
+	// ---- Collaborators ----
+	// Owner: add or change (role) or remove (null) a collaborator
+	async SetCollaborator(info: CloudProjectInfo, username: string, role: CollaboratorRole | null): Promise<boolean> {
+		this.lastError = "";
+		try {
+			const updated = await this.Request<CloudProjectInfo>("POST", "projects/" + encodeURIComponent(info.name) + "/collaborators", { username, role });
+			this.SetCloudInfo(updated);
+			return true;
+		} catch (e) {
+			this.Report(e);
+			return false;
+		} finally {
+			this.Changed();
+		}
+	}
+
+	// Collaborator: leave a shared project (the local copy stays, unsynced)
+	async Leave(info: CloudProjectInfo) {
+		try {
+			await this.Request("POST", "projects/" + encodeURIComponent(info.name) + "/collaborators?owner=" + encodeURIComponent(info.owner), { username: this.user?.username, role: null });
+			this.shared = this.shared.filter((p) => p !== info);
+			const link = this.LinkFor(info);
+			if (link) this.Unlink(link.name);
 		} catch (e) {
 			this.Report(e);
 		}

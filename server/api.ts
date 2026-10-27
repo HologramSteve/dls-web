@@ -7,10 +7,12 @@
 //   GET    /api/auth/me                                   -> {user}
 //   POST   /api/auth/password  {old, new}                 -> {}   (signs out other sessions)
 //   POST   /api/auth/delete    {password}                 -> {}   (deletes the account and its projects)
-//   GET    /api/projects                                  -> {projects: CloudProjectInfo[]}
+//   GET    /api/projects                                  -> {projects, shared}: own projects, and others' shared with you
 //   GET    /api/projects/<name>                           -> CloudProject
 //   PUT    /api/projects/<name> {files, base?, force?}    -> CloudProjectInfo   (409 if base is outdated)
 //   DELETE /api/projects/<name>                           -> {}
+//   POST   /api/projects/<name>/collaborators {username, role}  -> CloudProjectInfo   (role "editor" | "viewer" | null)
+// A project shared with you is addressed with ?owner=<owner's username> (GET, PUT, and leaving it via collaborators).
 import type { Features } from "./config";
 import { type AccountManager, PublicUser, type Result } from "./accounts";
 
@@ -78,8 +80,9 @@ export async function HandleApi(req: Request, ip: string, accounts: AccountManag
 		return FromResult(await accounts.DeleteAccount(user, body.password));
 	}
 
-	if (path === "projects" && method === "GET") return Json({ projects: accounts.ListProjects(user) });
-	const m = /^projects\/([^/]+)$/.exec(path);
+	if (path === "projects" && method === "GET") return Json(accounts.ListProjects(user));
+	const ownerName = url.searchParams.get("owner");
+	const m = /^projects\/([^/]+)(\/collaborators)?$/.exec(path);
 	if (m) {
 		let name: string;
 		try {
@@ -87,12 +90,21 @@ export async function HandleApi(req: Request, ip: string, accounts: AccountManag
 		} catch {
 			return ErrorResponse(400, "Invalid project name.");
 		}
-		if (method === "GET") return FromResult(accounts.GetProject(user, name));
-		if (method === "DELETE") return FromResult(accounts.DeleteProject(user, name));
+		if (m[2]) {
+			if (method !== "POST") return ErrorResponse(405, "Method not allowed.");
+			const body = await ReadJson(req, MaxAuthBodyBytes);
+			if (body instanceof Response) return body;
+			return FromResult(accounts.SetCollaborator(user, name, ownerName, body.username, body.role ?? null));
+		}
+		if (method === "GET") return FromResult(accounts.GetProject(user, name, ownerName));
+		if (method === "DELETE") {
+			if (ownerName && ownerName.toLowerCase() !== user.username.toLowerCase()) return ErrorResponse(403, "Only the owner can delete a project.");
+			return FromResult(accounts.DeleteProject(user, name));
+		}
 		if (method === "PUT") {
 			const body = await ReadJson(req, MaxProjectBodyBytes);
 			if (body instanceof Response) return body;
-			return FromResult(accounts.PutProject(user, name, body.files, body.base ?? 0, body.force === true));
+			return FromResult(accounts.PutProject(user, name, body.files, body.base ?? 0, body.force === true, ownerName));
 		}
 		return ErrorResponse(405, "Method not allowed.");
 	}

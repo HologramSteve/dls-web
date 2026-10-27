@@ -31,6 +31,7 @@ const css = `
 .web-panel .error { color: var(--bad); margin-top: 8px; white-space: pre-wrap; }
 .web-panel .actions { display: flex; gap: 4px; flex-wrap: wrap; width: 100%; padding-left: 16px; }
 .web-panel .actions button, .web-panel .actions select { padding: 3px 7px; font-size: 12px; }
+.web-panel .share { width: 100%; padding: 4px 0 0 16px; }
 .web-panel label.check { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 #web-bar { position: fixed; top: 8px; right: 8px; z-index: 10; display: flex; gap: 6px; align-items: flex-start; }
 `;

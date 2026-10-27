@@ -21,7 +21,7 @@ engine. A Rust simulation engine, compiled to WebAssembly, is the default and is
   - `check`: bun install, typecheck, lint, test, build;
   - `rust`: cargo test, then the WebAssembly build;
   - `docker`: builds the server image and smoke-tests it (health check, app, WebSocket).
-- **Checks:** `bun run check` (76 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
+- **Checks:** `bun run check` (78 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
   `bun run e2e`, `bun scripts/e2e-features.cjs`, `bun scripts/e2e-collab.cjs` and `bun scripts/e2e-cloud.cjs` all pass.
 
 ### Port (phase 1): complete
@@ -94,13 +94,16 @@ Full description: `docs/accounts.md`. Client in `src/cloud/`, server in `server/
 - **Cloud projects.** A local project is *linked*: every save uploads the whole project (versioned; a stale upload
   gets 409 → "conflict" with Keep mine / Use cloud). Linked projects pull newer versions when not open. Panel:
   "Account" button left of "Collab" (shared bar/styles in `src/web/Dom.ts`).
+- **Collaborators.** The owner adds users to a cloud project as editor or viewer. It appears under "Shared with
+  me", in a local folder `<name> (<owner>)`. Editors upload to the owner's project (same versions/conflicts), so work
+  goes on while the owner is away; viewers get a read-only copy (`CollabState.CloudReadOnly`).
 - **Collab identity.** Signed in, the collab `hello` carries the token; the server then uses the account's uid and
   moves the browser key's rooms to it.
 - **Feature flags** (`server/config.ts`): `APP_ONLY=1` (just the app: no /ws, no /api, no panels),
   `DISABLE_COLLAB`, `DISABLE_ACCOUNTS`, `REGISTRATION=closed`. The client reads `/config.json`
   (`src/web/Features.ts`); `VITE_APP_ONLY=1` at build time for static hosts.
-- **Tests.** `tests/accounts.test.ts`; `scripts/e2e-cloud.cjs [url] [appOnlyUrl]` (two browsers, one account, plus
-  an app-only server).
+- **Tests.** `tests/accounts.test.ts`; `scripts/e2e-cloud.cjs [url] [appOnlyUrl]` (two browsers on one account, a
+  second account as collaborator, and an app-only server).
 
 ### Web-specific additions / deviations (keep documented here)
 - **Test hook.** `src/main.ts` is UnityMain (the requestAnimationFrame loop). It exposes `window.dls` (Project,
@@ -120,12 +123,14 @@ Full description: `docs/accounts.md`. Client in `src/cloud/`, server in `server/
 - **Live collaboration** (`src/collab/`, `server/`). Hooks into ported code:
   - `FileSystem.AddChangeListener` (also used by cloud sync);
   - `Project.chipLibrary` is no longer readonly;
-  - `ChipInteractionController.HasControl` checks `CollabState.ReadOnly`;
+  - `ChipInteractionController.HasControl` checks `CollabState.ReadOnly` (and `CollabState.CloudReadOnly()` for
+    projects shared as viewer);
   - `Main.Update` calls `Collab.Update()` and `PresenceDrawer.Draw()`;
   - `main.ts` starts `CollabPanel`, and `window.dls` includes `Collab`.
 
   The panel is a DOM overlay, not ported UI.
-- **Accounts / cloud storage** (`src/cloud/`, `server/`). No hooks beyond `FileSystem.AddChangeListener`;
+- **Accounts / cloud storage** (`src/cloud/`, `server/`). No hooks beyond `FileSystem.AddChangeListener` and
+  `CollabState.CloudReadOnly`;
   `main.ts` loads `/config.json` and starts the panels that are on. `window.dls` includes `Cloud` and `Features`.
 - **Module order.** `main.ts` must import `collab/Collab` before `cloud/Cloud`: importing the game through `Cloud`
   first breaks a static initialiser (`FullScreenMode.Windowed` undefined).

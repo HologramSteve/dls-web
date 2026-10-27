@@ -65,7 +65,7 @@ export class ChipInteractionController {
 
 	get HasControl(): boolean {
 		// (web: viewers in a live collaboration room can't edit)
-		return !UIDrawer.InInputBlockingMenu() && this.project.CanEditViewedChip && !CollabState.ReadOnly;
+		return !UIDrawer.InInputBlockingMenu() && this.project.CanEditViewedChip && !CollabState.ReadOnly && !CollabState.CloudReadOnly();
 	}
 
 	// Cannot interact with elements when other elements are being moved, in a menu, or drawing a selection box

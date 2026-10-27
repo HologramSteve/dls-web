@@ -2,8 +2,8 @@
 // and for uploading, downloading and syncing projects. See docs/accounts.md.
 import { Features } from "../web/Features";
 import { h, MountInBar } from "../web/Dom";
-import { Cloud, IsProjectOpen, LocalProjectNames, type ProjectSyncState } from "./Cloud";
-import { CloudNameKey, MinPasswordLength } from "./CloudProtocol";
+import { Cloud, IsProjectOpen, type ProjectSyncState } from "./Cloud";
+import { CloudNameKey, type CloudProjectInfo, type CollaboratorRole, MinPasswordLength } from "./CloudProtocol";
 
 const StateText: Record<ProjectSyncState, string> = {
 	synced: "synced",
@@ -79,46 +79,112 @@ export const CloudPanel = {
 			h("div", { class: "muted", textContent: "With an account your projects are stored on this server and sync between your devices. Live collaboration rooms also follow your account." }),
 		];
 
-		const ProjectRow = (name: string, info: { version: number; updated: number; bytes: number } | null) => {
-			const state = Cloud.StateOf(name);
-			const buttons: (HTMLElement | false)[] = [];
-			if (state === "local-only") buttons.push(h("button", { class: "primary", textContent: "Upload", title: "Store in the cloud and keep it in sync", onclick: () => void Cloud.Link(name) }));
-			if (state === "cloud-only") {
-				buttons.push(h("button", { class: "primary", textContent: "Open", title: "Download to this device and open it", onclick: () => void Cloud.Open(name) }));
-				buttons.push(h("button", { textContent: "Download", onclick: () => void Cloud.Download(name) }));
+		// Per cloud project: the collaborator inputs (kept between renders, so typing isn't interrupted) and whether the
+		// collaborator list is unfolded
+		const shareInputs = new Map<string, { user: HTMLInputElement; role: HTMLSelectElement }>();
+		const unfolded = new Set<string>();
+		const RoleSelect = (value: CollaboratorRole, onchange?: (role: CollaboratorRole) => void) => {
+			const select = h("select", { title: "Role", onchange: (e: Event) => onchange?.((e.target as HTMLSelectElement).value as CollaboratorRole) });
+			select.append(h("option", { value: "editor", textContent: "can edit" }), h("option", { value: "viewer", textContent: "can view" }));
+			select.value = value;
+			return select;
+		};
+
+		const Collaborators = (info: CloudProjectInfo) => {
+			const key = CloudNameKey(info.name);
+			let inputs = shareInputs.get(key);
+			if (!inputs) {
+				inputs = { user: h("input", { placeholder: "Username", maxLength: 24 }), role: RoleSelect("editor") };
+				shareInputs.set(key, inputs);
 			}
-			if (state === "update") buttons.push(h("button", { textContent: "Get update", disabled: IsProjectOpen(name), title: IsProjectOpen(name) ? "Close the project first" : "", onclick: () => void Cloud.Download(name, false) }));
-			if (state === "conflict") {
-				buttons.push(
-					h("button", { textContent: "Keep mine", title: "Overwrite the cloud copy with this device's", onclick: () => confirm(`Overwrite the cloud copy of "${name}" with this device's copy?`) && void Cloud.ResolveConflict(name, "mine") }),
-					h("button", { textContent: "Use cloud", title: "Replace this device's copy with the cloud's", onclick: () => confirm(`Discard this device's changes to "${name}" and use the cloud copy?`) && void Cloud.ResolveConflict(name, "cloud") }),
-				);
-			}
-			const linked = Cloud.IsLinked(name);
-			const actions = h(
-				"div",
-				{ class: "actions" },
-				linked && h("button", { textContent: "Stop syncing", title: "Keep both copies, but stop syncing them", onclick: () => Cloud.Unlink(name) }),
-				info != null &&
-					h("button", { class: "danger", textContent: "Delete from cloud", onclick: () => confirm(`Delete "${name}" from your cloud storage? Copies on your devices stay.`) && void Cloud.DeleteFromCloud(name) }),
+			const { user, role } = inputs;
+			const add = async () => {
+				if (user.value.trim() && (await Cloud.SetCollaborator(info, user.value.trim(), role.value as CollaboratorRole))) user.value = "";
+			};
+			user.onkeydown = (e) => e.key === "Enter" && void add();
+			const list = (info.collaborators ?? []).map((c) =>
+				h(
+					"div",
+					{ class: "row" },
+					h("span", { class: "grow", textContent: c.username }),
+					RoleSelect(c.role, (r) => void Cloud.SetCollaborator(info, c.username, r)),
+					h("button", { textContent: "Remove", onclick: () => void Cloud.SetCollaborator(info, c.username, null) }),
+				),
 			);
-			const detail = info ? `${FormatTime(info.updated)} · ${FormatSize(info.bytes)}` : "";
 			return h(
 				"div",
-				{ class: "item" },
-				h("span", { class: "dot" + (state === "synced" ? " online" : state === "uploading" || state === "pending" ? " connecting" : ""), style: state === "conflict" ? "background:var(--bad)" : "" }),
-				h("span", { class: "grow", title: name }, h("b", { textContent: name }), h("div", { class: "muted", textContent: [StateText[state], detail].filter(Boolean).join(" · ") })),
-				...buttons.filter((b): b is HTMLElement => b !== false),
-				(linked || info != null) && actions,
+				{ class: "share" },
+				...(list.length > 0 ? list : [h("div", { class: "muted", textContent: "Only you. Add people to work on it together, also while you're away." })]),
+				h("div", { class: "row" }, user, role, h("button", { class: "primary", textContent: "Add", onclick: () => void add() })),
 			);
 		};
 
+		const StateDot = (state: ProjectSyncState) =>
+			h("span", { class: "dot" + (state === "synced" ? " online" : state === "uploading" || state === "pending" ? " connecting" : ""), style: state === "conflict" ? "background:var(--bad)" : "" });
+
+		// A project in the cloud (own or shared with the user)
+		const CloudRow = (info: CloudProjectInfo) => {
+			const own = Cloud.IsOwn(info);
+			const state = Cloud.StateOf(info);
+			const local = Cloud.LocalNameFor(info);
+			const open = IsProjectOpen(local);
+			const key = CloudNameKey(info.name);
+			const buttons: HTMLElement[] = [];
+			if (state === "cloud-only") {
+				buttons.push(h("button", { class: "primary", textContent: "Open", title: "Download to this device and open it", onclick: () => void Cloud.Open(info) }));
+				buttons.push(h("button", { textContent: "Download", onclick: () => void Cloud.Download(info) }));
+			}
+			if (state === "update") buttons.push(h("button", { textContent: "Get update", disabled: open, title: open ? "Close the project first" : "", onclick: () => void Cloud.Download(info, false) }));
+			if (state === "conflict") {
+				buttons.push(
+					h("button", { textContent: "Keep mine", title: "Overwrite the cloud copy with this device's", onclick: () => confirm(`Overwrite the cloud copy of "${info.name}" with this device's copy?`) && void Cloud.ResolveConflict(info, "mine") }),
+					h("button", { textContent: "Use cloud", title: "Replace this device's copy with the cloud's", onclick: () => confirm(`Discard this device's changes to "${info.name}" and use the cloud copy?`) && void Cloud.ResolveConflict(info, "cloud") }),
+				);
+			}
+			const linked = state !== "cloud-only";
+			const sharedCount = info.collaborators?.length ?? 0;
+			const actions = h(
+				"div",
+				{ class: "actions" },
+				own &&
+					h("button", {
+						textContent: sharedCount > 0 ? `Collaborators (${sharedCount})` : "Collaborators",
+						onclick: () => {
+							if (unfolded.has(key)) unfolded.delete(key);
+							else unfolded.add(key);
+							Render();
+						},
+					}),
+				linked && h("button", { textContent: "Stop syncing", title: "Keep both copies, but stop syncing them", onclick: () => Cloud.Unlink(local) }),
+				own && h("button", { class: "danger", textContent: "Delete from cloud", onclick: () => confirm(`Delete "${info.name}" from your cloud storage${sharedCount > 0 ? " (also for its collaborators)" : ""}? Copies on devices stay.`) && void Cloud.DeleteFromCloud(info) }),
+				!own && h("button", { class: "danger", textContent: "Leave", title: "Stop collaborating on this project", onclick: () => confirm(`Leave "${info.name}" by ${info.owner}? A copy stays on this device.`) && void Cloud.Leave(info) }),
+			);
+			const who = own ? (info.updatedBy && info.updatedBy !== Cloud.user?.username ? "saved by " + info.updatedBy : "") : `by ${info.owner} · ${info.role === "editor" ? "you can edit" : "view only"}`;
+			const detail = [StateText[state], who, FormatTime(info.updated), FormatSize(info.bytes)].filter(Boolean).join(" · ");
+			return h(
+				"div",
+				{ class: "item" },
+				StateDot(state),
+				h("span", { class: "grow", title: local }, h("b", { textContent: info.name }), h("div", { class: "muted", textContent: detail })),
+				...buttons,
+				actions,
+				own && unfolded.has(key) && Collaborators(info),
+			);
+		};
+
+		// A local project that isn't in the cloud
+		const LocalRow = (name: string) =>
+			h(
+				"div",
+				{ class: "item" },
+				StateDot("local-only"),
+				h("span", { class: "grow", title: name }, h("b", { textContent: name }), h("div", { class: "muted", textContent: StateText["local-only"] })),
+				h("button", { class: "primary", textContent: "Upload", title: "Store in the cloud and keep it in sync", onclick: () => void Cloud.Link(name) }),
+			);
+
 		const SignedIn = () => {
 			const user = Cloud.user!;
-			const cloudKeys = new Set(Cloud.projects.map((p) => CloudNameKey(p.name)));
-			const localOnly = LocalProjectNames()
-				.filter((n) => !cloudKeys.has(CloudNameKey(n)))
-				.sort((a, b) => a.localeCompare(b));
+			const localOnly = Cloud.LocalOnlyProjects().sort((a, b) => a.localeCompare(b));
 			const used = Cloud.projects.reduce((sum, p) => sum + p.bytes, 0);
 			const changePassword = async () => {
 				if (await Cloud.ChangePassword(oldPassInput.value, newPassInput.value)) {
@@ -133,10 +199,12 @@ export const CloudPanel = {
 			return [
 				h("div", { class: "row", style: "margin-top:8px" }, h("span", { class: "grow" }, "Signed in as ", h("b", { textContent: user.username })), h("button", { textContent: "Sign out", onclick: () => void Cloud.Logout() })),
 				h("h3", {}, `Cloud projects (${FormatSize(used)}) `, h("button", { textContent: "↻", title: "Refresh", style: "padding:0 6px", onclick: () => void Cloud.SyncAll() })),
-				...(Cloud.projects.length > 0 ? Cloud.projects.map((p) => ProjectRow(p.name, p)) : [h("div", { class: "muted", textContent: "Nothing stored yet: upload a project below." })]),
+				...(Cloud.projects.length > 0 ? Cloud.projects.map(CloudRow) : [h("div", { class: "muted", textContent: "Nothing stored yet: upload a project below." })]),
+				Cloud.shared.length > 0 && h("h3", { textContent: "Shared with me" }),
+				...Cloud.shared.map(CloudRow),
 				h("h3", { textContent: "Only on this device" }),
-				...(localOnly.length > 0 ? localOnly.map((n) => ProjectRow(n, null)) : [h("div", { class: "muted", textContent: "All your projects are in the cloud." })]),
-				h("div", { class: "muted", style: "margin-top:6px", textContent: "Synced projects upload after every save, and update on your other devices when they aren't open there." }),
+				...(localOnly.length > 0 ? localOnly.map(LocalRow) : [h("div", { class: "muted", textContent: "All your projects are in the cloud." })]),
+				h("div", { class: "muted", style: "margin-top:6px", textContent: "Synced projects upload after every save, and update on your other devices (and your collaborators') when they aren't open there." }),
 				h("details", {}, h("summary", { class: "muted", style: "margin-top:10px;cursor:pointer", textContent: "Account settings" }),
 					h("div", { class: "row" }, oldPassInput),
 					h("div", { class: "row" }, newPassInput, h("button", { textContent: "Change password", onclick: () => void changePassword() })),
@@ -147,7 +215,7 @@ export const CloudPanel = {
 
 		let renderedMode: string | null = null;
 		const Render = () => {
-			const states = Cloud.user ? Cloud.projects.map((p) => Cloud.StateOf(p.name)) : [];
+			const states = Cloud.user ? [...Cloud.projects, ...Cloud.shared].map((p) => Cloud.StateOf(p)) : [];
 			dot.className = "dot" + (!Cloud.user ? "" : states.some((s) => s === "uploading" || s === "pending") ? " connecting" : " online");
 			if (states.includes("conflict")) dot.setAttribute("style", "background:var(--bad)");
 			else dot.removeAttribute("style");
@@ -159,7 +227,7 @@ export const CloudPanel = {
 			const focused = document.activeElement;
 			if (mode === renderedMode && content.contains(focused) && (focused instanceof HTMLInputElement || focused instanceof HTMLSelectElement)) return;
 			renderedMode = mode;
-			content.replaceChildren(...(Cloud.user ? SignedIn() : SignedOut()));
+			content.replaceChildren(...(Cloud.user ? SignedIn() : SignedOut()).filter((n) => n !== false));
 		};
 
 		content.addEventListener("focusout", () => setTimeout(Render));

@@ -19,7 +19,16 @@ the original; like live collaboration it sits on top of the port, in `src/cloud/
 6. **Stop syncing** keeps both copies but no longer syncs them. **Delete from cloud** deletes the cloud copy only.
    Deleting or renaming a project on a device stops syncing it there; the cloud copy stays (upload it again under
    the new name).
-7. **Account settings** (in the panel): change the password (other devices are signed out), delete the account and
+7. **Collaborators.** Under one of your cloud projects, **Collaborators** lets you add other users by username,
+   as **can edit** or **can view**, change their role, or remove them. The project then shows up in their panel
+   under "Shared with me" (with **Open** / **Download**), in a local folder named `<project> (<owner>)`.
+   - Editors work on it like on their own synced projects: their saves upload to *your* cloud copy (it counts
+     against your storage), so work goes on while you are away. You get their changes like those from your other
+     devices; rows say who saved last. Two people saving without syncing in between get the usual conflict.
+   - Viewers get a read-only copy (the editor works like for a viewer in a live room) that updates automatically.
+   - A collaborator can **Leave**; deleting the project removes it for them (their local copies stay).
+   - To edit *at the same time*, use a live collaboration room (rooms keep working while the owner is away too).
+8. **Account settings** (in the panel): change the password (other devices are signed out), delete the account and
    its cloud projects.
 
 Signed in, live collaboration uses the account as your identity: your rooms are the same in every browser you sign
@@ -55,7 +64,8 @@ API allows any origin (CORS), since it uses bearer tokens, not cookies.
 ### Limits
 
 `DefaultAccountLimits` in `server/accounts.ts`:
-- 200 projects and 256 MB per user; 64 MB per project, 4 MB per file, 5000 files;
+- 200 projects and 256 MB per user (shared projects count for their owner); 64 MB per project, 4 MB per file,
+  5000 files; 50 collaborators per project;
 - sessions expire after 180 days unused;
 - 10 failed sign-ins per username or IP in 15 minutes, 5 new accounts per IP in 15 minutes. Behind a reverse proxy
   on the same machine (Caddy), the client IP comes from `X-Forwarded-For`.
@@ -85,10 +95,15 @@ API allows any origin (CORS), since it uses bearer tokens, not cookies.
   | `GET /api/auth/me` | `{user}` |
   | `POST /api/auth/password` `{old, new}` | `{}` |
   | `POST /api/auth/delete` `{password}` | `{}` |
-  | `GET /api/projects` | `{projects: [{name, version, updated, bytes}]}` |
-  | `GET /api/projects/<name>` | `{name, version, updated, bytes, files}` |
-  | `PUT /api/projects/<name>` `{files, base, force?}` | `{name, version, updated, bytes}`, or 409 |
-  | `DELETE /api/projects/<name>` | `{}` |
+  | `GET /api/projects` | `{projects: [...], shared: [...]}` of `{name, version, updated, bytes, owner, role, updatedBy?, collaborators?}` |
+  | `GET /api/projects/<name>` | that, plus `files` |
+  | `PUT /api/projects/<name>` `{files, base, force?}` | the new info, or 409 |
+  | `DELETE /api/projects/<name>` | `{}` (owner only) |
+  | `POST /api/projects/<name>/collaborators` `{username, role}` | the project's info; role `"editor"`, `"viewer"` or `null` (remove) |
+
+  `GET /api/projects` returns `{projects, shared}`: your own projects (with their `collaborators`) and others'
+  projects shared with you (with `owner` and your `role`). A shared project is addressed with
+  `?owner=<username>` (GET, PUT, and leaving it by posting your own username with role `null`).
 
 - **A project** is its save files relative to the project folder (`ProjectDescription.json`, `Chips/*.json`,
   `Deleted Chips/*.json`): the same format as rooms and zip export. Names compare case-insensitively.
@@ -97,15 +112,23 @@ API allows any origin (CORS), since it uses bearer tokens, not cookies.
 - **Links.** Which local projects are synced, their base version and whether they have unsent changes, is kept per
   account in localStorage (`dls-cloud-links:<user id>`). `FileSystem.AddChangeListener` marks a linked project
   changed on every write; it is uploaded 1.5 s after the last change (retried every 15 s while offline).
+- **Collaborators** are stored with the owner's project index (`shares`: user id → role); an in-memory index finds
+  the projects shared with a user. Editors' uploads go through the same version check as the owner's. A local link
+  remembers the cloud project's owner and name, and the user's role (refreshed on every sync: when the owner makes
+  someone a viewer, their pending changes are dropped). `CollabState.CloudReadOnly` makes a viewer's open project
+  read-only in `ChipInteractionController.HasControl`.
 - **Collaboration identity.** The collab `hello` message carries the token. When it is valid, the server uses a uid
   derived from the account instead of the browser key, and moves the browser key's rooms (ownership, roles, bans)
   to it (`RoomManager.ClaimRooms`).
 
-Tests: `tests/accounts.test.ts` (flags, accounts, throttling, projects, versions, quotas, API, collab identity) and
-`scripts/e2e-cloud.cjs` (two browsers on one account: upload, open on the other, update, conflict; and an app-only
-server).
+Tests: `tests/accounts.test.ts` (flags, accounts, throttling, projects, versions, quotas, collaborators, API, collab
+identity) and `scripts/e2e-cloud.cjs` (two browsers on one account: upload, open on the other, update, conflict; a
+second account as editor then viewer, leaving; and an app-only server).
 
 ## Known limitations
 - Whole projects are uploaded on every change (simple and robust; fine for typical project sizes).
 - Renaming a synced project stops syncing it; upload it again under the new name.
+- A viewer can still use menus that save locally (e.g. the chip library); those changes are never uploaded and are
+  replaced by the next update.
+- Changes reach collaborators on their next sync (panel opened, window focus, or within a minute), not live.
 - No password reset (there are no e-mail addresses). A forgotten password means a new account.

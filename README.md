@@ -6,7 +6,8 @@ A browser port of [Sebastian Lague's Digital Logic Sim](https://github.com/SebLa
   files.
 - **Live collaboration**: create a room, share the code, and build together with everyone's cursors and edits shown
   live, on one central server you host.
-- **Accounts and cloud storage**: sign in and your projects sync between your devices.
+- **Accounts and cloud storage**: sign in and your projects sync between your devices; add collaborators to a
+  project to work on it together, even while you're away.
 - **20–86× faster simulation** than a straight port of the original simulator, from a Rust engine compiled to
   WebAssembly. It gives identical results.
 
@@ -83,7 +84,8 @@ differs in a few places:
 - Projects are stored in your browser (IndexedDB), per site address.
 - **Live collaboration** (button at the top right): create a room from a project, share the code or invite link,
   and edit together. The owner can lock the room, make people viewers, kick or ban them.
-- **Account** (button at the top right): sign in to store projects on the server and sync them between devices.
+- **Account** (button at the top right): sign in to store projects on the server and sync them between devices,
+  and add collaborators (editors or viewers) to a project.
 - Sound from the buzzer chip starts after your first click or key press, because browsers block audio until then.
 
 ## Development

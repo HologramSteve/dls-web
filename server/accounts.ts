@@ -4,6 +4,8 @@
 //
 // - Passwords: scrypt with a per-user salt. Sessions: random bearer tokens, only their SHA-256 is kept.
 // - Projects are the save files of one project folder (the same format as rooms and project export).
+// - The owner of a project can add collaborators (other users) as editors or viewers. Editors upload to the owner's
+//   project like the owner does (same versions and conflicts); viewers only download it.
 import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { IsValidProjectFilePath } from "../src/collab/Protocol";
 import {
@@ -11,18 +13,46 @@ import {
 	type CloudProject,
 	type CloudProjectInfo,
 	type CloudUser,
+	type CollaboratorRole,
 	IsValidCloudProjectName,
+	MaxCollaborators,
 	MaxPasswordLength,
 	MinPasswordLength,
+	type ProjectList,
+	type ProjectRole,
 	UsernamePattern,
 } from "../src/cloud/CloudProtocol";
+
+export interface StoredProjectInfo {
+	name: string;
+	version: number;
+	updated: number;
+	bytes: number;
+	updatedBy?: string; // user id
+	shares?: Record<string, CollaboratorRole>; // collaborators by user id
+}
+
+// A project's contents as stored
+export interface StoredProject {
+	name: string;
+	version: number;
+	files: Record<string, string>;
+}
+
+// A project someone has access to
+interface Access {
+	owner: StoredUser;
+	key: string;
+	info: StoredProjectInfo;
+	role: ProjectRole;
+}
 
 export interface StoredUser {
 	id: string;
 	username: string;
 	pw: string; // "scrypt$<salt hex>$<hash hex>"
 	created: number;
-	projects: Record<string, CloudProjectInfo>; // by CloudNameKey
+	projects: Record<string, StoredProjectInfo>; // by CloudNameKey
 }
 
 export interface StoredSession {
@@ -39,8 +69,8 @@ export interface AccountData {
 export interface AccountStore {
 	load(): AccountData;
 	save(data: AccountData): void;
-	loadProject(uid: string, key: string): CloudProject | null;
-	saveProject(uid: string, key: string, project: CloudProject): void;
+	loadProject(uid: string, key: string): StoredProject | null;
+	saveProject(uid: string, key: string, project: StoredProject): void;
 	removeProject(uid: string, key: string): void;
 	removeUser(uid: string): void;
 }
@@ -132,6 +162,7 @@ class FailureCounter {
 export class AccountManager {
 	private readonly users = new Map<string, StoredUser>(); // by id
 	private readonly byName = new Map<string, StoredUser>(); // by lower-case username
+	private readonly sharedWith = new Map<string, Set<string>>(); // user id -> "<owner id>/<key>" of projects shared with them
 	private sessions: Record<string, StoredSession> = {};
 	private dirty = false;
 	private readonly loginFailures: FailureCounter;
@@ -149,6 +180,7 @@ export class AccountManager {
 			this.users.set(u.id, u);
 			this.byName.set(u.username.toLowerCase(), u);
 		}
+		for (const u of data.users) for (const [key, p] of Object.entries(u.projects)) for (const uid of Object.keys(p.shares ?? {})) this.IndexShare(uid, u.id, key, true);
 		this.sessions = data.sessions;
 		this.Sweep();
 	}
@@ -243,6 +275,14 @@ export class AccountManager {
 
 	async DeleteAccount(user: StoredUser, password: unknown): Promise<Result<null>> {
 		if (typeof password !== "string" || !(await VerifyPassword(password, user.pw))) return Fail(403, "The password is wrong.");
+		// Their projects are no longer shared with anyone, and they leave others' projects
+		for (const [key, p] of Object.entries(user.projects)) for (const uid of Object.keys(p.shares ?? {})) this.IndexShare(uid, user.id, key, false);
+		for (const ref of this.sharedWith.get(user.id) ?? []) {
+			const [ownerId, key] = SplitRef(ref);
+			const shares = this.users.get(ownerId)?.projects[key]?.shares;
+			if (shares) delete shares[user.id];
+		}
+		this.sharedWith.delete(user.id);
 		this.users.delete(user.id);
 		this.byName.delete(user.username.toLowerCase());
 		for (const [k, s] of Object.entries(this.sessions)) if (s.uid === user.id) delete this.sessions[k];
@@ -260,21 +300,57 @@ export class AccountManager {
 	}
 
 	// ---- Cloud projects ----
-	ListProjects(user: StoredUser): CloudProjectInfo[] {
-		return Object.values(user.projects).sort((a, b) => b.updated - a.updated);
+	ListProjects(user: StoredUser): ProjectList {
+		const projects = Object.keys(user.projects).map((key) => this.PublicInfo({ owner: user, key, info: user.projects[key], role: "owner" }));
+		const shared: CloudProjectInfo[] = [];
+		for (const ref of this.sharedWith.get(user.id) ?? []) {
+			const [ownerId, key] = SplitRef(ref);
+			const owner = this.users.get(ownerId);
+			const info = owner?.projects[key];
+			const role = info?.shares?.[user.id];
+			if (owner && info && role) shared.push(this.PublicInfo({ owner, key, info, role }));
+		}
+		const byTime = (a: CloudProjectInfo, b: CloudProjectInfo) => b.updated - a.updated;
+		return { projects: projects.sort(byTime), shared: shared.sort(byTime) };
 	}
 
-	GetProject(user: StoredUser, name: string): Result<CloudProject> {
+	// The project `name` of `ownerName` (default: the user's own) and the user's role in it
+	private Access(user: StoredUser, name: string, ownerName?: string | null): Result<Access> {
+		const owner = ownerName ? this.byName.get(ownerName.toLowerCase()) : user;
 		const key = CloudNameKey(name);
-		if (!user.projects[key]) return Fail(404, "No such project.");
-		const project = this.store?.loadProject(user.id, key) ?? null;
-		if (!project) return Fail(404, "No such project.");
-		return Ok({ ...project, ...user.projects[key] });
+		const info = owner?.projects[key];
+		if (!owner || !info) return Fail(404, "No such project.");
+		const role: ProjectRole | undefined = owner === user ? "owner" : info.shares?.[user.id];
+		if (!role) return Fail(404, "No such project.");
+		return Ok({ owner, key, info, role });
 	}
 
-	// Upload a project. `base` is the version the client last had: if the cloud has moved on since (another device
-	// uploaded), the upload is refused with 409 unless `force` is set. A new project needs base 0 (or none).
-	PutProject(user: StoredUser, name: unknown, files: unknown, base: unknown, force: boolean): Result<CloudProjectInfo> {
+	private PublicInfo(a: Access): CloudProjectInfo {
+		const { name, version, updated, bytes, updatedBy, shares } = a.info;
+		const res: CloudProjectInfo = { name, version, updated, bytes, owner: a.owner.username, role: a.role };
+		const by = updatedBy ? this.users.get(updatedBy) : null;
+		if (by) res.updatedBy = by.username;
+		if (a.role === "owner") {
+			res.collaborators = Object.entries(shares ?? {})
+				.map(([uid, role]) => ({ username: this.users.get(uid)?.username ?? "", role }))
+				.filter((c) => c.username !== "")
+				.sort((x, y) => x.username.localeCompare(y.username));
+		}
+		return res;
+	}
+
+	GetProject(user: StoredUser, name: string, ownerName?: string | null): Result<CloudProject> {
+		const access = this.Access(user, name, ownerName);
+		if (!access.ok) return access;
+		const project = this.store?.loadProject(access.value.owner.id, access.value.key) ?? null;
+		if (!project) return Fail(404, "No such project.");
+		return Ok({ ...this.PublicInfo(access.value), files: project.files });
+	}
+
+	// Upload a project (the user's own, or one they are an editor of). `base` is the version the client last had: if
+	// the cloud has moved on since (another device or collaborator uploaded), the upload is refused with 409 unless
+	// `force` is set. A new project needs base 0 (or none).
+	PutProject(user: StoredUser, name: unknown, files: unknown, base: unknown, force: boolean, ownerName?: string | null): Result<CloudProjectInfo> {
 		if (!IsValidCloudProjectName(name)) return Fail(400, "Invalid project name.");
 		if (files == null || typeof files !== "object" || Array.isArray(files)) return Fail(400, "Missing files.");
 		const entries = Object.entries(files as Record<string, unknown>);
@@ -290,29 +366,86 @@ export class AccountManager {
 		if (!("ProjectDescription.json" in clean)) return Fail(400, "Missing ProjectDescription.json.");
 		if (bytes > this.limits.maxProjectBytes) return Fail(413, "The project is too large.");
 
+		// Someone else's project: it must exist, and the user must be an editor (storage counts against the owner)
+		let owner = user;
+		if (ownerName && ownerName.toLowerCase() !== user.username.toLowerCase()) {
+			const access = this.Access(user, name, ownerName);
+			if (!access.ok) return access;
+			if (access.value.role !== "editor") return Fail(403, "You can only view this project.");
+			owner = access.value.owner;
+		}
 		const key = CloudNameKey(name);
-		const existing = user.projects[key];
+		const existing = owner.projects[key];
 		if (existing && !force && base !== existing.version) return Fail(409, "The cloud copy changed since you last synced.");
-		if (!existing && Object.keys(user.projects).length >= this.limits.maxProjectsPerUser) return Fail(413, `You can store at most ${this.limits.maxProjectsPerUser} projects.`);
+		if (!existing && Object.keys(owner.projects).length >= this.limits.maxProjectsPerUser) return Fail(413, `You can store at most ${this.limits.maxProjectsPerUser} projects.`);
 		let used = bytes;
-		for (const [k, p] of Object.entries(user.projects)) if (k !== key) used += p.bytes;
-		if (used > this.limits.maxBytesPerUser) return Fail(413, "Your cloud storage is full.");
+		for (const [k, p] of Object.entries(owner.projects)) if (k !== key) used += p.bytes;
+		if (used > this.limits.maxBytesPerUser) return Fail(413, owner === user ? "Your cloud storage is full." : "The owner's cloud storage is full.");
 
-		const info: CloudProjectInfo = { name, version: (existing?.version ?? 0) + 1, updated: Math.max(this.now(), (existing?.updated ?? 0) + 1), bytes };
-		this.store?.saveProject(user.id, key, { ...info, files: clean });
-		user.projects[key] = info;
+		const info: StoredProjectInfo = {
+			name: existing?.name ?? name,
+			version: (existing?.version ?? 0) + 1,
+			updated: Math.max(this.now(), (existing?.updated ?? 0) + 1),
+			bytes,
+			updatedBy: user.id,
+		};
+		if (existing?.shares) info.shares = existing.shares;
+		this.store?.saveProject(owner.id, key, { name: info.name, version: info.version, files: clean });
+		owner.projects[key] = info;
 		this.dirty = true;
-		return Ok(info);
+		return Ok(this.PublicInfo({ owner, key, info, role: owner === user ? "owner" : "editor" }));
 	}
 
 	DeleteProject(user: StoredUser, name: string): Result<null> {
 		const key = CloudNameKey(name);
-		if (!user.projects[key]) return Fail(404, "No such project.");
+		const info = user.projects[key];
+		if (!info) return Fail(404, "No such project.");
+		for (const uid of Object.keys(info.shares ?? {})) this.IndexShare(uid, user.id, key, false);
 		delete user.projects[key];
 		this.store?.removeProject(user.id, key);
 		this.dirty = true;
 		return Ok(null);
 	}
+
+	// Add, change or (role null) remove a collaborator. Owners manage everyone; collaborators can only remove themselves.
+	SetCollaborator(user: StoredUser, name: string, ownerName: string | null | undefined, username: unknown, role: unknown): Result<CloudProjectInfo | null> {
+		if (typeof username !== "string") return Fail(400, "Enter a username.");
+		if (role !== null && role !== "editor" && role !== "viewer") return Fail(400, "Invalid role.");
+		const access = this.Access(user, name, ownerName);
+		if (!access.ok) return access;
+		const { owner, key, info } = access.value;
+		const target = this.byName.get(username.toLowerCase());
+		const leaving = target === user && role === null && access.value.role !== "owner";
+		if (access.value.role !== "owner" && !leaving) return Fail(403, "Only the project's owner can change its collaborators.");
+		if (!target) return Fail(404, `There is no user "${username}".`);
+		if (target === owner) return Fail(400, "That's the project's owner.");
+		info.shares ??= {};
+		if (role === null) {
+			delete info.shares[target.id];
+			this.IndexShare(target.id, owner.id, key, false);
+		} else {
+			if (!info.shares[target.id] && Object.keys(info.shares).length >= MaxCollaborators) return Fail(413, `A project can have at most ${MaxCollaborators} collaborators.`);
+			info.shares[target.id] = role;
+			this.IndexShare(target.id, owner.id, key, true);
+		}
+		this.dirty = true;
+		return Ok(leaving ? null : this.PublicInfo(access.value));
+	}
+
+	private IndexShare(uid: string, ownerId: string, key: string, add: boolean) {
+		const ref = ownerId + "/" + key;
+		const set = this.sharedWith.get(uid) ?? new Set<string>();
+		if (add) set.add(ref);
+		else set.delete(ref);
+		if (set.size > 0) this.sharedWith.set(uid, set);
+		else this.sharedWith.delete(uid);
+	}
+}
+
+// "<owner id>/<key>" (ids have no '/')
+function SplitRef(ref: string): [string, string] {
+	const i = ref.indexOf("/");
+	return [ref.substring(0, i), ref.substring(i + 1)];
 }
 
 function PasswordError(password: unknown): string | null {

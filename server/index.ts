@@ -8,8 +8,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { createHash } from "node:crypto";
 import { join, normalize, resolve, sep } from "node:path";
 import type { ServerWebSocket } from "bun";
-import type { CloudProject } from "../src/cloud/CloudProtocol";
-import { type AccountData, AccountManager, type AccountStore } from "./accounts";
+import { type AccountData, AccountManager, type AccountStore, type StoredProject } from "./accounts";
 import { HandleApi } from "./api";
 import { FeaturesFromEnv } from "./config";
 import { type Conn, RoomManager, type RoomStore, type StoredRoom } from "./rooms";
@@ -80,12 +79,12 @@ class FileAccountStore implements AccountStore {
 		return join(this.dir, "projects", uid, createHash("sha256").update(key).digest("hex").substring(0, 32) + ".json");
 	}
 
-	loadProject(uid: string, key: string): CloudProject | null {
+	loadProject(uid: string, key: string): StoredProject | null {
 		const path = this.ProjectPath(uid, key);
 		return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
 	}
 
-	saveProject(uid: string, key: string, project: CloudProject) {
+	saveProject(uid: string, key: string, project: StoredProject) {
 		mkdirSync(join(this.dir, "projects", uid), { recursive: true });
 		WriteAtomic(this.ProjectPath(uid, key), JSON.stringify(project));
 	}
