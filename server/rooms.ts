@@ -119,6 +119,9 @@ function IsOp(v: unknown): v is DocOp {
 
 export class RoomManager {
 	readonly rooms = new Map<string, Room>();
+	// Account id of a session token, when accounts are on (server/index.ts): signed-in users are the same user in every
+	// browser they sign in to
+	AccountOf: ((token: string) => string | null) | null = null;
 	private readonly dirty = new Set<string>();
 	private nextCid = 1;
 
@@ -201,9 +204,44 @@ export class RoomManager {
 		const key = str(msg.userKey, 128);
 		if (key == null || key.length < 16) return conn.send({ t: "error", msg: "Invalid user key" });
 		conn.uid = UidFromUserKey(key);
+		const account = typeof msg.token === "string" && this.AccountOf ? this.AccountOf(msg.token) : null;
+		if (account != null) {
+			const accountUid = UidFromUserKey("account:" + account);
+			this.ClaimRooms(conn.uid, accountUid);
+			conn.uid = accountUid;
+		}
 		conn.name = CleanName(msg.name, "Guest");
 		conn.color = /^#[0-9a-fA-F]{6}$/.test(String(msg.color)) ? msg.color : DefaultColors[parseInt(conn.uid.substring(0, 2), 16) % DefaultColors.length];
 		conn.send({ t: "welcome", uid: conn.uid, cid: conn.cid });
+	}
+
+	// A browser user signed in to an account: their rooms (owned, memberships, bans) move to the account
+	private ClaimRooms(from: string, to: string) {
+		for (const room of this.rooms.values()) {
+			const d = room.data;
+			let changed = false;
+			if (d.owner === from) {
+				d.owner = to;
+				delete d.roles[to];
+				changed = true;
+			}
+			if (d.roles[from]) {
+				if (d.owner !== to && !d.roles[to] && !d.bans.includes(to)) d.roles[to] = d.roles[from];
+				delete d.roles[from];
+				changed = true;
+			}
+			if (d.bans.includes(from)) {
+				d.bans = d.bans.filter((u) => u !== from);
+				if (d.owner !== to && !d.bans.includes(to)) d.bans.push(to);
+				changed = true;
+			}
+			if (d.names[from]) {
+				d.names[to] ??= d.names[from];
+				delete d.names[from];
+				changed = true;
+			}
+			if (changed) this.MarkDirty(room);
+		}
 	}
 
 	private Profile(conn: Conn, name: unknown, color: unknown) {

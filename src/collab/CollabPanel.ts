@@ -6,64 +6,10 @@ import { MenuType, UIDrawer } from "../dls/graphics/ui/UIDrawer";
 import { Loader } from "../dls/saveSystem/Saver";
 import { Collab, CollabServerUrl, RoomProjectName } from "./Collab";
 import { NormalizeRoomCode, RoomCodeLength } from "./Protocol";
-
-const css = `
-@font-face { font-family: "DLS Mono"; src: url("./fonts/JetBrainsMonoNL-Regular.ttf"); }
-@font-face { font-family: "DLS Mono"; font-weight: bold; src: url("./fonts/JetBrainsMonoNL-Bold.ttf"); }
-#collab-root { --bg: #1d1d1f; --bg2: #2a2a2d; --bg3: #3a3a3e; --fg: #e8e8e8; --dim: #9a9a9f; --acc: #4f9dde; --bad: #e0534a; --good: #4fbf6a;
-  position: fixed; top: 8px; right: 8px; z-index: 10; font: 13px "DLS Mono", ui-monospace, monospace; color: var(--fg); }
-#collab-root * { box-sizing: border-box; font: inherit; }
-#collab-root button { background: var(--bg3); color: var(--fg); border: 0; border-radius: 4px; padding: 5px 9px; cursor: pointer; }
-#collab-root button:hover { filter: brightness(1.25); }
-#collab-root button.primary { background: var(--acc); color: #000; font-weight: bold; }
-#collab-root button.danger { background: var(--bad); color: #000; }
-#collab-root button:disabled { opacity: .45; cursor: default; filter: none; }
-#collab-root input, #collab-root select { background: var(--bg); color: var(--fg); border: 1px solid var(--bg3); border-radius: 4px; padding: 5px 7px; min-width: 0; }
-#collab-root input[type=color] { padding: 0 2px; width: 36px; height: 29px; }
-#collab-toggle { display: flex; align-items: center; gap: 7px; margin-left: auto; box-shadow: 0 2px 8px #0008; }
-#collab-root .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); display: inline-block; flex: none; }
-#collab-root .dot.online { background: var(--good); } #collab-root .dot.connecting { background: #e0b84a; }
-#collab-panel { margin-top: 6px; width: min(370px, calc(100vw - 16px)); max-height: calc(100vh - 60px); overflow: auto; background: var(--bg2);
-  border-radius: 6px; box-shadow: 0 4px 18px #000a; padding: 10px 12px 12px; }
-#collab-panel[hidden] { display: none; }
-#collab-panel h3 { margin: 12px 0 6px; font-weight: bold; font-size: 12px; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
-#collab-panel .row { display: flex; gap: 6px; align-items: center; margin: 5px 0; }
-#collab-panel .row > input:not([type=color]), #collab-panel .row > select { flex: 1; }
-#collab-panel .head { display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
-#collab-panel .code { font-size: 26px; font-weight: bold; letter-spacing: .18em; color: var(--acc); user-select: all; }
-#collab-panel .item { display: flex; gap: 7px; align-items: center; padding: 6px 7px; background: var(--bg); border-radius: 4px; margin: 4px 0; flex-wrap: wrap; }
-#collab-panel .item .grow { flex: 1; min-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#collab-panel .muted { color: var(--dim); font-size: 12px; }
-#collab-panel .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--bg3); color: var(--dim); }
-#collab-panel .error { color: var(--bad); margin-top: 8px; white-space: pre-wrap; }
-#collab-panel .actions { display: flex; gap: 4px; flex-wrap: wrap; width: 100%; padding-left: 16px; }
-#collab-panel .actions button, #collab-panel .actions select { padding: 3px 7px; font-size: 12px; }
-#collab-panel label.check { display: flex; gap: 6px; align-items: center; cursor: pointer; }
-`;
-
-function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, unknown> = {}, ...children: (Node | string | null | false)[]): HTMLElementTagNameMap[K] {
-	const el = document.createElement(tag);
-	for (const [k, v] of Object.entries(props)) {
-		if (k === "class") el.className = String(v);
-		else if (k === "style") el.setAttribute("style", String(v));
-		else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.substring(2), v as EventListener);
-		else (el as unknown as Record<string, unknown>)[k] = v;
-	}
-	for (const c of children) if (c !== null && c !== false) el.append(c);
-	return el;
-}
+import { Copy, h, MountInBar } from "../web/Dom";
 
 function InviteLink(code: string): string {
 	return location.origin + location.pathname + "?room=" + code;
-}
-
-function Copy(text: string, button: HTMLButtonElement) {
-	const done = () => {
-		const old = button.textContent;
-		button.textContent = "Copied";
-		setTimeout(() => (button.textContent = old), 1200);
-	};
-	navigator.clipboard?.writeText(text).then(done, () => prompt("Copy:", text));
 }
 
 function OpenProjectName(): string | null {
@@ -81,17 +27,14 @@ function ConfirmLeaveCurrentProject(): boolean {
 
 export const CollabPanel = {
 	Init() {
-		document.head.append(h("style", { textContent: css }));
-		const root = h("div", { id: "collab-root" });
-		// Keep typing in the panel away from the game's keyboard shortcuts
-		for (const type of ["keydown", "keyup", "keypress", "paste", "pointerdown", "wheel"]) root.addEventListener(type, (e) => e.stopPropagation());
+		const root = h("div", { id: "collab-root", class: "web-ui" });
 
 		const dot = h("span", { class: "dot" });
 		const toggleLabel = h("span", { textContent: "Collab" });
-		const toggle = h("button", { id: "collab-toggle", title: "Live collaboration" }, dot, toggleLabel);
-		const panel = h("div", { id: "collab-panel", hidden: true });
+		const toggle = h("button", { id: "collab-toggle", class: "web-toggle", title: "Live collaboration" }, dot, toggleLabel);
+		const panel = h("div", { id: "collab-panel", class: "web-panel", hidden: true });
 		root.append(h("div", { style: "display:flex" }, toggle), panel);
-		document.body.append(root);
+		MountInBar(root);
 
 		toggle.addEventListener("click", () => {
 			panel.hidden = !panel.hidden;

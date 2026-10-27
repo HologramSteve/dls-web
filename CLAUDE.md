@@ -2,7 +2,7 @@
 
 Web port of Sebastian Lague's **Digital Logic Sim** (Unity/C#, MIT) to the browser.
 **Start every session by reading `docs/HANDOFF.md`** (current status + next steps), then `docs/architecture.md`, `docs/porting.md`,
-`docs/rust-engine.md` and `docs/performance.md`.
+`docs/rust-engine.md` and `docs/performance.md` (and `docs/collaboration.md` / `docs/accounts.md` for the server features).
 
 ## Rules
 - This is a *faithful port*: each TS file mirrors an original C# file (same names, same logic). Do not redesign.
@@ -29,7 +29,10 @@ Package manager / script runner: Bun (`bun.lock`; don't add a package-lock.json)
 - `src/worker/` — simulation Web Worker (`engines.ts`: JS engine / Rust WASM engine; `dls_sim.wasm` is a build output)
 - `rust/dls-sim/` — Rust simulation engine (native tests + benchmark, WebAssembly API)
 - `src/collab/` — live collaboration client (web-only, docs/collaboration.md); `Protocol.ts` is shared with the server
-- `server/` — central Bun server (static app + rooms over WebSocket at /ws); `bun run server` / `bun run dev:server`
+- `src/cloud/` — accounts + cloud project storage client (web-only, docs/accounts.md); `CloudProtocol.ts` is shared with the server
+- `src/web/` — shared web-only overlay bits: panel styles/bar (`Dom.ts`), feature flags from /config.json (`Features.ts`)
+- `server/` — central Bun server (static app + rooms over WebSocket at /ws + accounts API at /api); `bun run server` / `bun run dev:server`.
+  Feature flags (`server/config.ts`): `APP_ONLY=1` serves just the app; also `DISABLE_COLLAB`, `DISABLE_ACCOUNTS`, `REGISTRATION=closed`
 - `docs/benchmarks.json` + `docs/img/performance.svg` — benchmark data and README chart (`bun scripts/perfChart.ts`)
 - `public/fonts/` — fonts from the original repo (JetBrains Mono NL, Born2bSporty)
 - `testdata/Projects/` — original test project (for import tests)

@@ -12,6 +12,7 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY src/collab/Protocol.ts ./src/collab/Protocol.ts
+COPY src/cloud/CloudProtocol.ts ./src/cloud/CloudProtocol.ts
 ENV PORT=8787 DATA_DIR=/data STATIC_DIR=/app/dist
 RUN mkdir -p /data && chown bun:bun /data
 VOLUME /data

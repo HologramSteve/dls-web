@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["bun"]
   },
-  "include": [".", "../src/collab/Protocol.ts"]
+  "include": [".", "../src/collab/Protocol.ts", "../src/cloud/CloudProtocol.ts"]
 }

@@ -6,6 +6,7 @@ A browser port of [Sebastian Lague's Digital Logic Sim](https://github.com/SebLa
   files.
 - **Live collaboration**: create a room, share the code, and build together with everyone's cursors and edits shown
   live, on one central server you host.
+- **Accounts and cloud storage**: sign in and your projects sync between your devices.
 - **20–86× faster simulation** than a straight port of the original simulator, from a Rust engine compiled to
   WebAssembly. It gives identical results.
 
@@ -48,14 +49,19 @@ bun run build        # static site in dist/ — serve it with `bun run preview` 
 
 A browser with WebGL2 and module workers is required (any current Chrome, Edge, Firefox or Safari).
 
-### Hosting with live collaboration
+### Hosting with live collaboration and accounts
 
-The server serves the app and the collaboration WebSocket from one process (rooms are saved in `./data`):
+The server serves the app, the collaboration WebSocket and the accounts API from one process (rooms, accounts and
+cloud projects are saved in `./data`):
 
 ```sh
 bun run build && bun run server     # http://localhost:8787
 # or: docker build -t dls-web . && docker run -d -p 8787:8787 -v dls-data:/data dls-web
 ```
+
+To host **just the app**, without collaboration, accounts or cloud storage, set `APP_ONLY=1`
+(`docker run -e APP_ONLY=1 ...`). For a static host without the server, build with `VITE_APP_ONLY=1 bun run build`.
+Other flags are in [docs/accounts.md](docs/accounts.md#feature-flags).
 
 For development, run `bun run dev:server` next to `bun run dev`. HTTPS, reverse proxies and limits are covered in
 [docs/collaboration.md](docs/collaboration.md).
@@ -77,6 +83,7 @@ differs in a few places:
 - Projects are stored in your browser (IndexedDB), per site address.
 - **Live collaboration** (button at the top right): create a room from a project, share the code or invite link,
   and edit together. The owner can lock the room, make people viewers, kick or ban them.
+- **Account** (button at the top right): sign in to store projects on the server and sync them between devices.
 - Sound from the buzzer chip starts after your first click or key press, because browsers block audio until then.
 
 ## Development
@@ -88,7 +95,8 @@ bun run bench        # JS vs WebAssembly benchmark
 bun run e2e          # browser smoke test (Playwright; needs `bun run dev` running)
 bun scripts/e2e-features.cjs [screenshotDir]   # broader browser feature test
 bun scripts/e2e-collab.cjs [url] [screenshotDir] # two-browser collaboration test (needs dev + dev:server)
-bun run dev:server   # collaboration server with restart on change (Vite proxies /ws to it)
+bun scripts/e2e-cloud.cjs [url] [appOnlyUrl]     # two-browser accounts / cloud storage test (needs the server)
+bun run dev:server   # server with restart on change (Vite proxies /ws, /api and /config.json to it)
 
 bun run build:wasm   # rebuild src/worker/dls_sim.wasm (needs Rust + the wasm32-unknown-unknown target)
 bun run test:rust    # Rust engine tests (native)
@@ -104,7 +112,9 @@ Project layout:
 | `src/dls/` | Port of the game: save format, saving/loading, simulator, game logic, graphics and menus |
 | `src/worker/` | Simulation Web Worker and its two engines (`engines.ts`); `dls_sim.wasm` is the compiled Rust engine |
 | `src/collab/` | Live collaboration client (web-only): sync, presence, panel; `Protocol.ts` is shared with the server |
-| `server/` | Central server (Bun): static app + rooms over WebSocket |
+| `src/cloud/` | Accounts and cloud storage client (web-only); `CloudProtocol.ts` is shared with the server |
+| `src/web/` | Shared web-only overlay bits (panel styles, feature flags) |
+| `server/` | Central server (Bun): static app + rooms over WebSocket + accounts API |
 | `rust/dls-sim/` | Rust simulation engine: tests, native benchmark, WebAssembly interface |
 | `tests/` | Vitest tests and benchmarks |
 | `scripts/` | Browser tests (Playwright), chart and fixture generators |
@@ -117,6 +127,7 @@ Project layout:
 - [docs/performance.md](docs/performance.md): benchmarks, where the speed comes from, correctness, reproducing.
 - [docs/rust-engine.md](docs/rust-engine.md): the Rust engine's design and why it is exact.
 - [docs/collaboration.md](docs/collaboration.md): live collaboration: using it, hosting the server, how sync works.
+- [docs/accounts.md](docs/accounts.md): accounts and cloud storage, feature flags (app-only hosting).
 - [docs/architecture.md](docs/architecture.md): runtime architecture (frame loop, worker, renderer, storage).
 - [docs/HANDOFF.md](docs/HANDOFF.md): current status, web-only deviations, known issues, conventions.
 - [CLAUDE.md](CLAUDE.md): rules for AI agents working on this repo.
