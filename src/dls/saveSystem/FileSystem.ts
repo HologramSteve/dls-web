@@ -12,8 +12,16 @@ class VirtualFileSystem {
 	private pending = new Map<string, string | null>(); // path -> content (null = delete)
 	private flushScheduled = false;
 	private flushPromise: Promise<void> = Promise.resolve();
-	// Called for every write/delete (web: used by live collaboration to sync the files of a room's project)
-	onChange: ((path: string, content: string | null) => void) | null = null;
+	// Called for every write/delete (web: used by live collaboration and cloud sync to follow project files)
+	private readonly changeListeners = new Set<(path: string, content: string | null) => void>();
+
+	AddChangeListener(fn: (path: string, content: string | null) => void) {
+		this.changeListeners.add(fn);
+	}
+
+	private Changed(path: string, content: string | null) {
+		for (const fn of this.changeListeners) fn(path, content);
+	}
 
 	// Load all files from IndexedDB into memory. Safe to call when IndexedDB is unavailable (memory only).
 	async init(): Promise<void> {
@@ -108,14 +116,14 @@ class VirtualFileSystem {
 		const p = VirtualFileSystem.normalize(path);
 		this.files.set(p, content);
 		this.schedule(p, content);
-		this.onChange?.(p, content);
+		this.Changed(p, content);
 	}
 
 	DeleteFile(path: string) {
 		const p = VirtualFileSystem.normalize(path);
 		if (this.files.delete(p)) {
 			this.schedule(p, null);
-			this.onChange?.(p, null);
+			this.Changed(p, null);
 		}
 	}
 

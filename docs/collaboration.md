@@ -19,8 +19,9 @@ Owner controls (in the panel): rename the room, set the default role for new mem
 change members' roles (editor / viewer), kick, ban, make someone else the owner, delete the room.
 Viewers see everything live but can't change anything.
 
-Identity is a random key kept in the browser (localStorage). There are no accounts: the same browser is the same
-user. Clearing site data makes you a new user (an owner would lose ownership of their rooms).
+Identity is a random key kept in the browser (localStorage): the same browser is the same user, and clearing site
+data makes you a new user (an owner would lose ownership of their rooms). Signed in to an account
+([accounts.md](accounts.md)), you are the account instead, in every browser, and your browser's rooms move to it.
 
 ## Running the server
 
@@ -44,6 +45,7 @@ docker run -d -p 8787:8787 -v dls-data:/data --restart unless-stopped dls-web
 | `PORT` | `8787` | HTTP + WebSocket port |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Rooms are stored as `rooms/<CODE>.json` |
 | `STATIC_DIR` | `./dist` | Built web app |
+| `APP_ONLY` | | `1`: just the app, no collaboration or accounts. More flags in [accounts.md](accounts.md#feature-flags) |
 
 For HTTPS, put it behind a reverse proxy that passes WebSocket upgrades. The client connects to `wss://<same
 host>/ws` automatically. With Caddy, `your.domain { reverse_proxy localhost:8787 }` is enough. With nginx, use
@@ -80,7 +82,7 @@ Files: `src/collab/` (client), `server/` (server), `tests/collab.test.ts`.
 ### Two levels of sync
 
 **1. Project files.** A room *is* a project folder: `ProjectDescription.json` and `Chips/*.json`, exactly the save
-format. `FileSystem.onChange` (a hook) catches every write the game makes under `Projects/Room <CODE>/`. Changes
+format. A `FileSystem.AddChangeListener` hook catches every write the game makes under `Projects/Room <CODE>/`. Changes
 are batched per frame and sent; the server stores them and relays them to everyone. Receivers write the files and
 reload the project description and chip library. So anything the game saves syncs, including saving chips, renames,
 deletes, collections, stars and preferences, with no per-feature code.
@@ -143,5 +145,5 @@ real state back. On the client, `CollabState.ReadOnly` disables editing in `Chip
 - **One shared canvas for new chips.** Everyone's unsaved "new chip" canvas is the same shared one until it is
   saved under a name.
 - **Remote edits wait for menus.** They aren't applied while you have a menu open; they appear when you close it.
-- **No accounts, no encryption at rest.** Anyone with a room code can join an unlocked room; lock it, or set the
+- **No encryption at rest.** Anyone with a room code can join an unlocked room; lock it, or set the
   default role to viewer, to control that.

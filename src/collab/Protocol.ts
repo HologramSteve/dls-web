@@ -379,7 +379,8 @@ export type ManageAction =
 export type FileChange = [path: string, content: string | null];
 
 export type ClientMsg =
-	| { t: "hello"; v: number; userKey: string; name: string; color: string }
+	// token: the account session (accounts/cloud storage); when valid, the user is the account instead of the browser key
+	| { t: "hello"; v: number; userKey: string; name: string; color: string; token?: string }
 	| { t: "profile"; name: string; color: string }
 	| { t: "rooms" }
 	| { t: "create"; name: string; files: Record<string, string> }

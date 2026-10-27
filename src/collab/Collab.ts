@@ -97,6 +97,8 @@ class CollabSession {
 	rooms: RoomSummary[] = [];
 	lastError = "";
 	readonly peers = new Map<string, Peer>();
+	// Session token of the signed-in account (set by the cloud session): rooms then belong to the account
+	AccountToken: () => string | null = () => null;
 	private readonly listeners = new Set<() => void>();
 
 	private ws: WebSocket | null = null;
@@ -143,7 +145,7 @@ class CollabSession {
 		}
 		this.name = profile.name || "Guest " + key.substring(0, 3).toUpperCase();
 		this.color = profile.color || ProfileColors[parseInt(key.substring(0, 2), 16) % ProfileColors.length];
-		FileSystem.onChange = (path, content) => this.OnLocalFileChange(path, content);
+		FileSystem.AddChangeListener((path, content) => this.OnLocalFileChange(path, content));
 		// In a background tab there are no frames (so no presence updates): hide our cursor for the others meanwhile
 		if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => document.hidden && this.SendAwayPresence());
 	}
@@ -193,7 +195,8 @@ class CollabSession {
 		this.ws = ws;
 		ws.onopen = () => {
 			this.reconnectDelay = 500;
-			ws.send(JSON.stringify({ t: "hello", v: ProtocolVersion, userKey: this.userKey, name: this.name, color: this.color } satisfies ClientMsg));
+			const token = this.AccountToken() ?? undefined;
+			ws.send(JSON.stringify({ t: "hello", v: ProtocolVersion, userKey: this.userKey, name: this.name, color: this.color, token } satisfies ClientMsg));
 		};
 		ws.onmessage = (e) => {
 			let msg: ServerMsg;
@@ -216,6 +219,14 @@ class CollabSession {
 		ws.onerror = () => {
 			this.lastError = "Can't reach the collaboration server";
 		};
+	}
+
+	// Say hello again (signed in or out): reconnect if connected
+	Reconnect() {
+		if (!this.ws) return;
+		const ws = this.ws;
+		this.reconnectDelay = 50;
+		ws.close();
 	}
 
 	private ScheduleReconnect() {

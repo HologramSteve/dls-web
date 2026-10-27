@@ -11,8 +11,9 @@ engine. A Rust simulation engine, compiled to WebAssembly, is the default and is
   - `docs/rust-engine.md`: engine design and why it is exact.
   - `docs/performance.md`: benchmarks.
   - `docs/collaboration.md`: live collaboration (rooms, server, sync design).
+  - `docs/accounts.md`: accounts, cloud storage of projects, and the server feature flags (`APP_ONLY=1`).
 
-## Current state (2026-10-26)
+## Current state (2026-10-27)
 
 - **Branches:** `main` and `claude/blissful-brahmagupta-8yaivk` are identical; everything is merged. Work on the
   branch, then fast-forward `main` when asked.
@@ -20,8 +21,8 @@ engine. A Rust simulation engine, compiled to WebAssembly, is the default and is
   - `check`: bun install, typecheck, lint, test, build;
   - `rust`: cargo test, then the WebAssembly build;
   - `docker`: builds the server image and smoke-tests it (health check, app, WebSocket).
-- **Checks:** `bun run check` (67 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
-  `bun run e2e`, and `bun scripts/e2e-features.cjs` all pass.
+- **Checks:** `bun run check` (78 Vitest tests), `bun run test:rust` (4 tests + 1 ignored stats test),
+  `bun run e2e`, `bun scripts/e2e-features.cjs`, `bun scripts/e2e-collab.cjs` and `bun scripts/e2e-cloud.cjs` all pass.
 
 ### Port (phase 1): complete
 All original C# files are ported: Seb lib, Description, SaveSystem, Simulation, Game, and Graphics with every menu.
@@ -83,8 +84,26 @@ Rooms with codes on one central server (`server/`, Bun), client in `src/collab/`
   - inbox compaction;
   - RoomManager (roles, bans, persistence);
   - ChipSync on real chips from the test project.
-  The server was smoke-tested over real WebSockets. `scripts/e2e-collab.cjs` is a two-browser test: create a room,
-  join by link and the member list passed in a browser; its later steps haven't been run yet.
+  `scripts/e2e-collab.cjs` (two browsers in a room: edits, saves, roles, reconnect) passes in full against the
+  built app on the real server.
+
+### Accounts + cloud storage (phase 4): complete
+Full description: `docs/accounts.md`. Client in `src/cloud/`, server in `server/accounts.ts` + `server/api.ts`.
+- **Accounts.** Username + password (scrypt), bearer session tokens (only hashes stored), sign-in throttling,
+  change password, delete account. Stored in `DATA_DIR/accounts/`.
+- **Cloud projects.** A local project is *linked*: every save uploads the whole project (versioned; a stale upload
+  gets 409 → "conflict" with Keep mine / Use cloud). Linked projects pull newer versions when not open. Panel:
+  "Account" button left of "Collab" (shared bar/styles in `src/web/Dom.ts`).
+- **Collaborators.** The owner adds users to a cloud project as editor or viewer. It appears under "Shared with
+  me", in a local folder `<name> (<owner>)`. Editors upload to the owner's project (same versions/conflicts), so work
+  goes on while the owner is away; viewers get a read-only copy (`CollabState.CloudReadOnly`).
+- **Collab identity.** Signed in, the collab `hello` carries the token; the server then uses the account's uid and
+  moves the browser key's rooms to it.
+- **Feature flags** (`server/config.ts`): `APP_ONLY=1` (just the app: no /ws, no /api, no panels),
+  `DISABLE_COLLAB`, `DISABLE_ACCOUNTS`, `REGISTRATION=closed`. The client reads `/config.json`
+  (`src/web/Features.ts`); `VITE_APP_ONLY=1` at build time for static hosts.
+- **Tests.** `tests/accounts.test.ts`; `scripts/e2e-cloud.cjs [url] [appOnlyUrl]` (two browsers on one account, a
+  second account as collaborator, and an app-only server).
 
 ### Web-specific additions / deviations (keep documented here)
 - **Test hook.** `src/main.ts` is UnityMain (the requestAnimationFrame loop). It exposes `window.dls` (Project,
@@ -102,13 +121,19 @@ Rooms with codes on one central server (`server/`, Bun), client in `src/collab/`
 - **ROM "PASTE ALL"** uses `navigator.clipboard.readText`, falling back to the next Ctrl+V paste event.
 - **Audio** uses an AudioWorklet, started on the first pointer or key press.
 - **Live collaboration** (`src/collab/`, `server/`). Hooks into ported code:
-  - `FileSystem.onChange`;
+  - `FileSystem.AddChangeListener` (also used by cloud sync);
   - `Project.chipLibrary` is no longer readonly;
-  - `ChipInteractionController.HasControl` checks `CollabState.ReadOnly`;
+  - `ChipInteractionController.HasControl` checks `CollabState.ReadOnly` (and `CollabState.CloudReadOnly()` for
+    projects shared as viewer);
   - `Main.Update` calls `Collab.Update()` and `PresenceDrawer.Draw()`;
   - `main.ts` starts `CollabPanel`, and `window.dls` includes `Collab`.
 
   The panel is a DOM overlay, not ported UI.
+- **Accounts / cloud storage** (`src/cloud/`, `server/`). No hooks beyond `FileSystem.AddChangeListener` and
+  `CollabState.CloudReadOnly`;
+  `main.ts` loads `/config.json` and starts the panels that are on. `window.dls` includes `Cloud` and `Features`.
+- **Module order.** `main.ts` must import `collab/Collab` before `cloud/Cloud`: importing the game through `Cloud`
+  first breaks a static initialiser (`FullScreenMode.Windowed` undefined).
 - **Reserved shortcuts.** Ctrl+N / Ctrl+Q / Ctrl+W can't be intercepted; use the MENU popup buttons.
 
 ### Known issues / next steps
@@ -124,8 +149,9 @@ Rooms with codes on one central server (`server/`, Bun), client in `src/collab/`
    - a dedicated exact op for latch patterns, since RAM-sync is latch-bound;
    - multi-worker simulation for very large circuits;
    - building tables asynchronously, since table building briefly blocks the worker on load (2–60 ms per circuit).
-4. **Collaboration next steps:**
-   - run the rest of `scripts/e2e-collab.cjs` (it needs Playwright, which isn't a devDependency);
+4. **Collaboration / accounts next steps:**
+   - keep a synced project linked across a local rename;
+   - password reset (would need e-mail addresses);
    - a synced simulation clock (simulation is local per client);
    - per-user undo that skips others' edits.
 5. **Test hooks.** Remove the `window.dls` hook and the `Draw.Debug*` getters if undesired (they're harmless).
